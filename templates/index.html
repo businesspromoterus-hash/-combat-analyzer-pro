@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Combat Analyzer Pro{% endblock %}
+
+{% block content %}
+<div x-data="dashboard()" x-init="load()">
+
+  <!-- Hero -->
+  <div class="bg-gradient-to-br from-navy-900 to-navy-700 rounded-xl p-8 mb-8 text-white shadow-lg">
+    <h1 class="text-3xl font-extrabold mb-2">Plan estratégico de combate</h1>
+    <p class="text-gray-200 mb-4 max-w-2xl">
+      Crea perfiles de tu peleador y el rival, analiza videos de peleas con IA,
+      y genera un plan táctico completo en PDF.
+    </p>
+    <div class="flex flex-wrap gap-3">
+      <a href="/fighters/new?role=our" class="btn-primary !bg-white !text-navy-900 hover:!bg-gray-100">
+        + Nuestro peleador
+      </a>
+      <a href="/fighters/new?role=opponent" class="btn-primary !bg-blood-500 hover:!bg-blood-600">
+        + Oponente
+      </a>
+      <a href="/plan/new" class="btn-primary !bg-gold-500 !text-navy-900 hover:!bg-gold-600">
+        → Generar plan de combate
+      </a>
+    </div>
+  </div>
+
+  <!-- Estado de motores -->
+  <div class="card p-4 mb-8">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-bold text-gray-800">Motores de IA disponibles</h2>
+      <button @click="loadEngines()" class="text-sm text-navy-700 hover:underline">
+        Actualizar
+      </button>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <template x-for="e in engines" :key="e.name">
+        <div class="border rounded-md p-3"
+             :class="e.configured ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-gray-50'">
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-bold uppercase text-sm" x-text="e.name"></span>
+            <span class="text-xs font-bold"
+                  :class="e.configured ? 'text-green-700' : 'text-gray-400'"
+                  x-text="e.configured ? '● ACTIVO' : '○ Sin API key'"></span>
+          </div>
+          <div class="text-xs text-gray-600 flex gap-3">
+            <span x-show="e.video">📹 Video</span>
+            <span x-show="e.strategy">🎯 Estrategia</span>
+            <span x-show="e.vision">👁 Visión</span>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- Listado peleadores -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+    <!-- Nuestros peleadores -->
+    <section>
+      <h2 class="text-xl font-bold text-navy-900 mb-3 flex items-center gap-2">
+        <span class="badge badge-our">NOSOTROS</span>
+        Nuestros peleadores
+      </h2>
+      <div class="space-y-3">
+        <template x-for="f in ourFighters" :key="f.id">
+          <a :href="`/fighters/${f.id}`" class="card p-4 hover:shadow-md transition block">
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="font-bold text-lg" x-text="f.name"></div>
+                <div class="text-sm text-gray-600 uppercase" x-text="f.sport"></div>
+                <div class="text-xs text-gray-500 mt-1">
+                  <span x-text="f.division || '—'"></span> ·
+                  <span x-text="f.record_str"></span> ·
+                  <span x-text="(f.country || '—')"></span>
+                </div>
+              </div>
+              <span class="badge badge-our text-xs">→</span>
+            </div>
+          </a>
+        </template>
+        <div x-show="ourFighters.length === 0" class="card p-6 text-center text-gray-500">
+          Aún no tienes peleadores registrados.
+          <a href="/fighters/new?role=our" class="text-navy-700 font-bold hover:underline">Crear uno</a>.
+        </div>
+      </div>
+    </section>
+
+    <!-- Oponentes -->
+    <section>
+      <h2 class="text-xl font-bold text-blood-500 mb-3 flex items-center gap-2">
+        <span class="badge badge-opp">RIVAL</span>
+        Oponentes
+      </h2>
+      <div class="space-y-3">
+        <template x-for="f in opponents" :key="f.id">
+          <a :href="`/fighters/${f.id}`" class="card p-4 hover:shadow-md transition block">
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="font-bold text-lg" x-text="f.name"></div>
+                <div class="text-sm text-gray-600 uppercase" x-text="f.sport"></div>
+                <div class="text-xs text-gray-500 mt-1">
+                  <span x-text="f.division || '—'"></span> ·
+                  <span x-text="f.record_str"></span> ·
+                  <span x-text="(f.country || '—')"></span>
+                </div>
+              </div>
+              <span class="badge badge-opp text-xs">→</span>
+            </div>
+          </a>
+        </template>
+        <div x-show="opponents.length === 0" class="card p-6 text-center text-gray-500">
+          Aún no tienes oponentes registrados.
+          <a href="/fighters/new?role=opponent" class="text-blood-500 font-bold hover:underline">Crear uno</a>.
+        </div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+function dashboard() {
+  return {
+    ourFighters: [],
+    opponents: [],
+    engines: [],
+    async load() {
+      const [our, opp] = await Promise.all([
+        fetch('/api/fighters?role=our').then(r => r.json()),
+        fetch('/api/fighters?role=opponent').then(r => r.json()),
+      ]);
+      this.ourFighters = our;
+      this.opponents = opp;
+      this.loadEngines();
+    },
+    async loadEngines() {
+      const data = await fetch('/api/analysis/engines').then(r => r.json());
+      this.engines = data.engines;
+    },
+  };
+}
+</script>
+{% endblock %}

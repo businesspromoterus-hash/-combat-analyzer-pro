@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+{% block title %}Peleador - Combat Analyzer Pro{% endblock %}
+
+{% block content %}
+<div x-data="fighterDetail({{ fighter_id }})" x-init="load()">
+  <a href="/" class="text-navy-700 hover:underline">← Volver al inicio</a>
+
+  <div x-show="!fighter" class="text-center py-12 text-gray-500">Cargando...</div>
+
+  <div x-show="fighter" x-cloak>
+
+    <!-- Header del peleador -->
+    <div class="card p-6 mt-4 mb-6">
+      <div class="flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <span class="badge"
+                :class="fighter && fighter.role === 'our' ? 'badge-our' : 'badge-opp'"
+                x-text="fighter && fighter.role === 'our' ? 'NUESTRO' : 'OPONENTE'"></span>
+          <h1 class="text-3xl font-extrabold text-navy-900 mt-2" x-text="fighter && fighter.name"></h1>
+          <div class="text-gray-600 uppercase font-semibold" x-text="fighter && fighter.sport"></div>
+        </div>
+        <div class="text-right">
+          <div class="text-3xl font-extrabold text-navy-900" x-text="fighter && fighter.record_str"></div>
+          <div class="text-sm text-gray-500">V-D-E</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6 text-sm">
+        <div><div class="text-gray-500">Edad</div><div class="font-bold" x-text="fighter && (fighter.age || '—')"></div></div>
+        <div><div class="text-gray-500">Peso</div><div class="font-bold" x-text="fighter && (fighter.weight_kg ? fighter.weight_kg + ' kg' : '—')"></div></div>
+        <div><div class="text-gray-500">División</div><div class="font-bold" x-text="fighter && (fighter.division || '—')"></div></div>
+        <div><div class="text-gray-500">Estatura</div><div class="font-bold" x-text="fighter && (fighter.height_cm ? fighter.height_cm + ' cm' : '—')"></div></div>
+        <div><div class="text-gray-500">Alcance</div><div class="font-bold" x-text="fighter && (fighter.reach_cm ? fighter.reach_cm + ' cm' : '—')"></div></div>
+        <div><div class="text-gray-500">Guardia</div><div class="font-bold capitalize" x-text="fighter && fighter.stance"></div></div>
+        <div><div class="text-gray-500">País</div><div class="font-bold" x-text="fighter && (fighter.country || '—')"></div></div>
+        <div><div class="text-gray-500">Exp.</div><div class="font-bold" x-text="fighter && (fighter.years_experience ? fighter.years_experience + ' años' : '—')"></div></div>
+        <div><div class="text-gray-500">KOs</div><div class="font-bold" x-text="fighter && fighter.ko_wins"></div></div>
+        <div><div class="text-gray-500">Subs</div><div class="font-bold" x-text="fighter && fighter.sub_wins"></div></div>
+      </div>
+    </div>
+
+    <!-- Sección peleas -->
+    <div class="card p-6 mb-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-bold text-navy-900">Peleas registradas</h2>
+        <span class="text-sm text-gray-500" x-text="fights.length + ' pelea(s)'"></span>
+      </div>
+
+      <!-- Form añadir pelea -->
+      <div class="bg-gray-50 border border-gray-200 rounded-md p-4 mb-4">
+        <div class="flex gap-2 mb-3">
+          <button @click="addMode = 'url'"
+                  :class="addMode === 'url' ? 'bg-navy-900 text-white' : 'bg-white text-gray-700'"
+                  class="px-3 py-1 rounded text-sm font-semibold border">
+            🔗 Link YouTube
+          </button>
+          <button @click="addMode = 'upload'"
+                  :class="addMode === 'upload' ? 'bg-navy-900 text-white' : 'bg-white text-gray-700'"
+                  class="px-3 py-1 rounded text-sm font-semibold border">
+            📁 Subir archivo
+          </button>
+        </div>
+
+        <div x-show="addMode === 'url'" class="space-y-2">
+          <input x-model="newFight.youtube_url" class="input" placeholder="https://youtube.com/watch?v=...">
+          <div class="grid grid-cols-2 gap-2">
+            <input x-model="newFight.title" class="input" placeholder="Título (opcional)">
+            <input x-model="newFight.opponent_name" class="input" placeholder="Vs. (oponente)">
+          </div>
+          <input x-model="newFight.result" class="input" placeholder="Resultado: win-ko-r2, loss-decision, etc.">
+          <textarea x-model="newFight.coach_notes" class="input" rows="2"
+                    placeholder="Notas del entrenador sobre esta pelea (opcional pero MUY útil)"></textarea>
+          <button @click="addFightUrl()" :disabled="!newFight.youtube_url" class="btn-primary">
+            Agregar pelea
+          </button>
+        </div>
+
+        <div x-show="addMode === 'upload'" class="space-y-2">
+          <input type="file" @change="newFight.file = $event.target.files[0]"
+                 accept="video/mp4,video/quicktime,video/x-msvideo,video/webm"
+                 class="input">
+          <div class="grid grid-cols-2 gap-2">
+            <input x-model="newFight.title" class="input" placeholder="Título (opcional)">
+            <input x-model="newFight.opponent_name" class="input" placeholder="Vs. (oponente)">
+          </div>
+          <input x-model="newFight.result" class="input" placeholder="Resultado">
+          <textarea x-model="newFight.coach_notes" class="input" rows="2"
+                    placeholder="Notas del entrenador"></textarea>
+          <button @click="uploadFight()" :disabled="!newFight.file || uploading" class="btn-primary">
+            <span x-show="!uploading">Subir video</span>
+            <span x-show="uploading">Subiendo...</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Listado peleas -->
+      <div class="space-y-2">
+        <template x-for="f in fights" :key="f.id">
+          <div class="border rounded-md p-3 flex items-center justify-between">
+            <div class="flex-1">
+              <div class="font-semibold" x-text="f.title || ('Pelea #' + f.id)"></div>
+              <div class="text-xs text-gray-500">
+                <span x-show="f.youtube_url">🔗 YouTube</span>
+                <span x-show="f.local_file_path">📁 Archivo local</span>
+                <span x-show="f.opponent_name"> · vs. <span x-text="f.opponent_name"></span></span>
+                <span x-show="f.result"> · <span x-text="f.result"></span></span>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button @click="analyzeFight(f.id)" class="btn-primary !py-1 !px-3 text-xs">
+                🤖 Analizar
+              </button>
+              <button @click="deleteFight(f.id)" class="btn-secondary !py-1 !px-3 text-xs">
+                ✕
+              </button>
+            </div>
+          </div>
+        </template>
+        <div x-show="fights.length === 0" class="text-center py-6 text-gray-500 text-sm">
+          Aún no hay peleas. Agrega al menos una para empezar el análisis.
+        </div>
+      </div>
+    </div>
+
+    <!-- Análisis existentes -->
+    <div x-show="analyses.length > 0" class="card p-6 mb-6">
+      <h2 class="text-xl font-bold text-navy-900 mb-4">Análisis de IA por pelea</h2>
+      <div class="space-y-3">
+        <template x-for="a in analyses" :key="a.id">
+          <div class="border rounded-md p-4">
+            <div class="flex justify-between items-start">
+              <div>
+                <div class="text-sm font-semibold">
+                  Pelea #<span x-text="a.fight_id"></span> ·
+                  Motor: <span class="uppercase" x-text="a.engine_used"></span>
+                </div>
+                <div class="text-xs"
+                     :class="a.status === 'completed' ? 'text-green-600' : a.status === 'failed' ? 'text-red-600' : 'text-yellow-600'"
+                     x-text="a.status.toUpperCase()"></div>
+              </div>
+            </div>
+            <details x-show="a.status === 'completed' && a.result" class="mt-3">
+              <summary class="cursor-pointer text-sm font-semibold text-navy-700">Ver análisis</summary>
+              <div class="mt-3 space-y-2 text-sm">
+                <div><b>Estilo:</b> <span x-text="a.result && a.result.fighting_style"></span></div>
+                <div>
+                  <b>Fortalezas:</b>
+                  <ul class="list-disc list-inside text-gray-700">
+                    <template x-for="s in (a.result && a.result.strengths) || []">
+                      <li x-text="s"></li>
+                    </template>
+                  </ul>
+                </div>
+                <div>
+                  <b>Debilidades:</b>
+                  <ul class="list-disc list-inside text-gray-700">
+                    <template x-for="w in (a.result && a.result.weaknesses) || []">
+                      <li x-text="w"></li>
+                    </template>
+                  </ul>
+                </div>
+              </div>
+            </details>
+            <div x-show="a.status === 'failed'" class="mt-2 text-xs text-red-600" x-text="a.error_message"></div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Perfil sintetizado -->
+    <div class="card p-6 mb-6">
+      <div class="flex justify-between items-center mb-3">
+        <h2 class="text-xl font-bold text-navy-900">Perfil táctico consolidado</h2>
+        <button @click="synthesizeProfile()" :disabled="synthesizing" class="btn-primary !py-1 !px-3 text-sm">
+          <span x-show="!synthesizing">🔄 Generar / actualizar</span>
+          <span x-show="synthesizing">Sintetizando...</span>
+        </button>
+      </div>
+      <div x-show="!profile" class="text-gray-500 text-sm">
+        Aún no hay perfil. Analiza al menos una pelea y luego genera el perfil consolidado.
+      </div>
+      <div x-show="profile" class="space-y-3 text-sm">
+        <p class="font-semibold text-gray-800" x-text="profile && profile.profile.summary"></p>
+        <div><b>Estilo general:</b> <span x-text="profile && profile.profile.overall_style"></span></div>
+        <div>
+          <b>Fortalezas consistentes:</b>
+          <ul class="list-disc list-inside text-gray-700">
+            <template x-for="s in (profile && profile.profile.consistent_strengths) || []">
+              <li x-text="s"></li>
+            </template>
+          </ul>
+        </div>
+        <div>
+          <b>Debilidades consistentes:</b>
+          <ul class="list-disc list-inside text-gray-700">
+            <template x-for="w in (profile && profile.profile.consistent_weaknesses) || []">
+              <li x-text="w"></li>
+            </template>
+          </ul>
+        </div>
+        <div><b>Cardio:</b> <span x-text="profile && profile.profile.cardio_profile"></span></div>
+        <div><b>Mental:</b> <span x-text="profile && profile.profile.mental_profile"></span></div>
+      </div>
+    </div>
+
+    <div x-show="message" x-cloak
+         class="fixed bottom-4 right-4 bg-navy-900 text-white px-4 py-3 rounded shadow-lg max-w-md">
+      <span x-text="message"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+function fighterDetail(fighterId) {
+  return {
+    fighterId: fighterId,
+    fighter: null,
+    fights: [],
+    analyses: [],
+    profile: null,
+    addMode: 'url',
+    newFight: { youtube_url: '', file: null, title: '', opponent_name: '', result: '', coach_notes: '' },
+    uploading: false,
+    synthesizing: false,
+    message: '',
+
+    async load() {
+      this.fighter = await fetch(`/api/fighters/${this.fighterId}`).then(r => r.json());
+      await this.loadFights();
+      await this.loadProfile();
+    },
+    async loadFights() {
+      this.fights = await fetch(`/api/fights/fighter/${this.fighterId}`).then(r => r.json());
+      // Cargar análisis de cada pelea
+      this.analyses = [];
+      for (const f of this.fights) {
+        const a = await fetch(`/api/analysis/fight/${f.id}`).then(r => r.json());
+        this.analyses.push(...a);
+      }
+    },
+    async loadProfile() {
+      const res = await fetch(`/api/analysis/profile/${this.fighterId}`);
+      this.profile = res.ok ? await res.json() : null;
+    },
+
+    async addFightUrl() {
+      const payload = {
+        fighter_id: this.fighterId,
+        youtube_url: this.newFight.youtube_url,
+        title: this.newFight.title || null,
+        opponent_name: this.newFight.opponent_name || null,
+        result: this.newFight.result || null,
+        coach_notes: this.newFight.coach_notes || null,
+      };
+      const res = await fetch('/api/fights/url', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        this.showMessage('Error: ' + (await res.text()));
+        return;
+      }
+      this.newFight = { youtube_url: '', file: null, title: '', opponent_name: '', result: '', coach_notes: '' };
+      this.showMessage('✓ Pelea agregada');
+      this.loadFights();
+    },
+
+    async uploadFight() {
+      if (!this.newFight.file) return;
+      this.uploading = true;
+      try {
+        const fd = new FormData();
+        fd.append('fighter_id', this.fighterId);
+        fd.append('file', this.newFight.file);
+        if (this.newFight.title) fd.append('title', this.newFight.title);
+        if (this.newFight.opponent_name) fd.append('opponent_name', this.newFight.opponent_name);
+        if (this.newFight.result) fd.append('result', this.newFight.result);
+        if (this.newFight.coach_notes) fd.append('coach_notes', this.newFight.coach_notes);
+        const res = await fetch('/api/fights/upload', { method: 'POST', body: fd });
+        if (!res.ok) throw new Error(await res.text());
+        this.newFight = { youtube_url: '', file: null, title: '', opponent_name: '', result: '', coach_notes: '' };
+        this.showMessage('✓ Video subido');
+        this.loadFights();
+      } catch (e) {
+        this.showMessage('Error: ' + e.message);
+      } finally {
+        this.uploading = false;
+      }
+    },
+
+    async analyzeFight(fightId) {
+      this.showMessage('🤖 Analizando pelea (puede tardar 1-5 minutos)...');
+      try {
+        const res = await fetch('/api/analysis/fight', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ fight_id: fightId }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        this.showMessage('✓ Análisis completado');
+        this.loadFights();
+      } catch (e) {
+        this.showMessage('Error: ' + e.message);
+      }
+    },
+
+    async deleteFight(fightId) {
+      if (!confirm('¿Eliminar esta pelea y sus análisis?')) return;
+      await fetch(`/api/fights/${fightId}`, { method: 'DELETE' });
+      this.loadFights();
+    },
+
+    async synthesizeProfile() {
+      this.synthesizing = true;
+      try {
+        const res = await fetch('/api/analysis/profile', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ fighter_id: this.fighterId }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        this.profile = await res.json();
+        this.showMessage('✓ Perfil actualizado');
+      } catch (e) {
+        this.showMessage('Error: ' + e.message);
+      } finally {
+        this.synthesizing = false;
+      }
+    },
+
+    showMessage(msg) {
+      this.message = msg;
+      setTimeout(() => { this.message = ''; }, 4000);
+    },
+  };
+}
+</script>
+{% endblock %}

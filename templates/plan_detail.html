@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}Plan de combate{% endblock %}
+
+{% block content %}
+<div x-data="planDetail({{ plan_id }})" x-init="load()">
+  <a href="/" class="text-navy-700 hover:underline">← Inicio</a>
+
+  <div x-show="!plan" class="text-center py-12 text-gray-500">Cargando plan...</div>
+
+  <div x-show="plan" x-cloak class="mt-4">
+
+    <!-- Header con botón PDF -->
+    <div class="bg-gradient-to-r from-navy-900 to-navy-700 text-white rounded-xl p-6 mb-6 shadow-lg">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div class="text-gold-500 text-xs font-bold tracking-wider mb-1">PLAN DE COMBATE</div>
+          <h1 class="text-3xl font-extrabold">
+            <span x-text="ourFighter && ourFighter.name"></span>
+            <span class="text-gold-500 mx-2">vs</span>
+            <span x-text="oppFighter && oppFighter.name"></span>
+          </h1>
+          <div class="text-gray-300 mt-1 text-sm">
+            Motor: <span class="uppercase font-bold" x-text="plan && plan.engine_used"></span>
+          </div>
+        </div>
+        <a :href="`/api/analysis/plan/${planId}/pdf`" target="_blank"
+           class="btn-primary !bg-blood-500 hover:!bg-blood-600">
+          📄 Descargar PDF
+        </a>
+      </div>
+    </div>
+
+    <!-- Resumen ejecutivo -->
+    <div class="card p-6 mb-6 border-l-4 border-blood-500">
+      <h2 class="font-bold text-navy-900 mb-2 text-lg">RESUMEN EJECUTIVO</h2>
+      <p class="text-gray-800" x-text="plan && plan.plan.executive_summary"></p>
+    </div>
+
+    <!-- Cruce de estilos -->
+    <div class="card p-6 mb-6">
+      <h2 class="font-bold text-navy-900 text-lg mb-4">CRUCE DE ESTILOS</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div class="bg-navy-900 text-white p-4 rounded">
+          <div class="text-gold-500 text-xs font-bold mb-1">NUESTRO ESTILO</div>
+          <div x-text="plan && plan.plan.style_matchup.our_style"></div>
+        </div>
+        <div class="bg-blood-500 text-white p-4 rounded">
+          <div class="text-yellow-200 text-xs font-bold mb-1">SU ESTILO</div>
+          <div x-text="plan && plan.plan.style_matchup.their_style"></div>
+        </div>
+      </div>
+      <div class="bg-gray-100 p-3 rounded">
+        <b>Choque clave:</b> <span x-text="plan && plan.plan.style_matchup.key_clash"></span>
+      </div>
+    </div>
+
+    <!-- Planes A/B/C -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <template x-for="(key, idx) in ['plan_a', 'plan_b', 'plan_c']" :key="key">
+        <div class="card p-5"
+             :class="idx === 0 ? 'border-t-4 border-green-500' : idx === 1 ? 'border-t-4 border-yellow-500' : 'border-t-4 border-red-500'">
+          <div class="text-xs font-bold uppercase tracking-wider mb-1"
+               :class="idx === 0 ? 'text-green-600' : idx === 1 ? 'text-yellow-600' : 'text-red-600'">
+            <span x-text="['PLAN A — PRINCIPAL', 'PLAN B — ALTERNATIVO', 'PLAN C — EMERGENCIA'][idx]"></span>
+          </div>
+          <h3 class="font-bold text-lg mb-2" x-text="plan && plan.plan[key].name"></h3>
+          <div class="text-sm mb-2"><b>Idea:</b> <span x-text="plan && plan.plan[key].core_idea"></span></div>
+          <div class="text-sm mb-2"><b>Ejecución:</b> <span x-text="plan && plan.plan[key].execution"></span></div>
+          <div class="text-sm" x-show="plan && plan.plan[key].trigger">
+            <b>Activar cuando:</b> <span x-text="plan && plan.plan[key].trigger"></span>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- Por rounds -->
+    <div class="card p-6 mb-6">
+      <h2 class="font-bold text-navy-900 text-lg mb-4">ESTRATEGIA POR ROUNDS</h2>
+      <div class="space-y-3">
+        <template x-for="r in (plan && plan.plan.rounds_strategy) || []" :key="r.round">
+          <div class="border-l-4 border-navy-700 pl-4 py-2">
+            <div class="font-bold">Round <span x-text="r.round"></span>:
+              <span class="text-navy-700" x-text="r.focus"></span>
+            </div>
+            <div class="text-sm mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <div class="text-green-700 font-bold text-xs">HACER:</div>
+                <ul class="list-disc list-inside">
+                  <template x-for="d in r.do"><li x-text="d"></li></template>
+                </ul>
+              </div>
+              <div>
+                <div class="text-red-700 font-bold text-xs">EVITAR:</div>
+                <ul class="list-disc list-inside">
+                  <template x-for="a in r.avoid"><li x-text="a"></li></template>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Plan del rival + contramedidas -->
+    <div class="card p-6 mb-6">
+      <h2 class="font-bold text-navy-900 text-lg mb-3">PLAN PROBABLE DEL RIVAL</h2>
+      <div class="bg-red-50 border border-red-200 p-4 rounded mb-4 text-sm">
+        <div><b>Su plan principal:</b> <span x-text="plan && plan.plan.opponent_likely_plan.their_main_plan"></span></div>
+        <div class="mt-2"><b>Su plan B:</b> <span x-text="plan && plan.plan.opponent_likely_plan.their_backup_plan"></span></div>
+      </div>
+
+      <h3 class="font-bold mb-2">Contramedidas</h3>
+      <table class="w-full text-sm border">
+        <thead class="bg-navy-900 text-white">
+          <tr>
+            <th class="text-left p-2">Si el rival hace…</th>
+            <th class="text-left p-2">Nuestra respuesta</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="cm in (plan && plan.plan.countermeasures) || []">
+            <tr class="border-b">
+              <td class="p-2 align-top" x-text="cm.if_opponent_does"></td>
+              <td class="p-2 align-top bg-green-50" x-text="cm.our_response"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Sparrings -->
+    <div class="card p-6 mb-6">
+      <h2 class="font-bold text-navy-900 text-lg mb-3">SPARRINGS RECOMENDADOS</h2>
+      <div class="space-y-2">
+        <template x-for="sp in (plan && plan.plan.sparring_profiles) || []">
+          <div class="border-l-4 border-gold-500 pl-3 py-1 text-sm">
+            <div class="font-bold" x-text="sp.type"></div>
+            <div class="text-gray-700" x-text="sp.why"></div>
+            <span class="badge bg-gold-500 text-navy-900 text-xs uppercase" x-text="sp.priority"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Campamento -->
+    <div class="card p-6 mb-6">
+      <h2 class="font-bold text-navy-900 text-lg mb-3">PLAN DE CAMPAMENTO</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div><b>Físico:</b> <p x-text="plan && plan.plan.camp_plan.physical"></p></div>
+        <div><b>Técnico:</b> <p x-text="plan && plan.plan.camp_plan.technical"></p></div>
+        <div><b>Táctico:</b> <p x-text="plan && plan.plan.camp_plan.tactical"></p></div>
+        <div><b>Enfoque general:</b> <p x-text="plan && plan.plan.camp_plan.focus"></p></div>
+      </div>
+    </div>
+
+    <div class="text-center mb-12">
+      <a :href="`/api/analysis/plan/${planId}/pdf`" target="_blank"
+         class="btn-primary !bg-blood-500 hover:!bg-blood-600 text-lg !px-8 !py-3">
+        📄 Descargar PDF profesional
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+function planDetail(planId) {
+  return {
+    planId: planId,
+    plan: null,
+    ourFighter: null,
+    oppFighter: null,
+    async load() {
+      this.plan = await fetch(`/api/analysis/plan/${this.planId}`).then(r => r.json());
+      this.ourFighter = await fetch(`/api/fighters/${this.plan.our_fighter_id}`).then(r => r.json());
+      this.oppFighter = await fetch(`/api/fighters/${this.plan.opponent_id}`).then(r => r.json());
+    },
+  };
+}
+</script>
+{% endblock %}

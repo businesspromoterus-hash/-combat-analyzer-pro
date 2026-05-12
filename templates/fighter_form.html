@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}Nuevo peleador - Combat Analyzer Pro{% endblock %}
+
+{% block content %}
+<div x-data="fighterForm()" x-init="init()">
+  <div class="mb-6 flex items-center gap-3">
+    <a href="/" class="text-navy-700 hover:underline">← Inicio</a>
+  </div>
+
+  <div class="card p-8 max-w-3xl mx-auto">
+    <h1 class="text-2xl font-extrabold text-navy-900 mb-1">Nuevo peleador</h1>
+    <p class="text-gray-600 mb-6">Datos básicos para construir el perfil táctico.</p>
+
+    <form @submit.prevent="submit()" class="space-y-5">
+
+      <!-- Rol -->
+      <div>
+        <label class="label">¿Quién es este peleador?</label>
+        <div class="grid grid-cols-2 gap-3">
+          <button type="button" @click="form.role = 'our'"
+                  :class="form.role === 'our' ? 'border-navy-900 bg-navy-900 text-white' : 'border-gray-300 bg-white text-gray-700'"
+                  class="border-2 rounded-md p-3 font-bold transition">
+            🥊 Nuestro peleador
+          </button>
+          <button type="button" @click="form.role = 'opponent'"
+                  :class="form.role === 'opponent' ? 'border-blood-500 bg-blood-500 text-white' : 'border-gray-300 bg-white text-gray-700'"
+                  class="border-2 rounded-md p-3 font-bold transition">
+            🎯 Oponente
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="label">Nombre completo *</label>
+          <input x-model="form.name" required class="input" placeholder="Ej. Juan Pérez">
+        </div>
+        <div>
+          <label class="label">Disciplina *</label>
+          <select x-model="form.sport" required class="input">
+            <option value="boxing">Boxeo</option>
+            <option value="mma">MMA</option>
+            <option value="judo">Judo</option>
+            <option value="kickboxing">Kickboxing</option>
+            <option value="muay_thai">Muay Thai</option>
+            <option value="bjj">BJJ</option>
+            <option value="karate">Karate</option>
+            <option value="taekwondo">Taekwondo</option>
+            <option value="wrestling">Lucha</option>
+            <option value="other">Otro</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <label class="label">Edad</label>
+          <input type="number" x-model.number="form.age" class="input" min="10" max="80">
+        </div>
+        <div>
+          <label class="label">Peso (kg)</label>
+          <input type="number" x-model.number="form.weight_kg" class="input" step="0.1">
+        </div>
+        <div>
+          <label class="label">Estatura (cm)</label>
+          <input type="number" x-model.number="form.height_cm" class="input">
+        </div>
+        <div>
+          <label class="label">Alcance (cm)</label>
+          <input type="number" x-model.number="form.reach_cm" class="input">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="label">División</label>
+          <input x-model="form.division" class="input" placeholder="Ej. Welter, -73kg, Lightweight">
+        </div>
+        <div>
+          <label class="label">Guardia</label>
+          <select x-model="form.stance" class="input">
+            <option value="orthodox">Diestro (orthodox)</option>
+            <option value="southpaw">Zurdo (southpaw)</option>
+            <option value="switch">Switch</option>
+            <option value="na">N/A (judo, lucha)</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">País</label>
+          <input x-model="form.country" class="input" placeholder="Ej. México">
+        </div>
+      </div>
+
+      <!-- Récord -->
+      <div>
+        <label class="label">Récord</label>
+        <div class="grid grid-cols-3 md:grid-cols-6 gap-3">
+          <div>
+            <label class="text-xs text-gray-500">Victorias</label>
+            <input type="number" x-model.number="form.wins" class="input" min="0">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">Derrotas</label>
+            <input type="number" x-model.number="form.losses" class="input" min="0">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">Empates</label>
+            <input type="number" x-model.number="form.draws" class="input" min="0">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">KOs</label>
+            <input type="number" x-model.number="form.ko_wins" class="input" min="0">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">Subs</label>
+            <input type="number" x-model.number="form.sub_wins" class="input" min="0">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">Ippons</label>
+            <input type="number" x-model.number="form.ippon_wins" class="input" min="0">
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label class="label">Años de experiencia</label>
+        <input type="number" x-model.number="form.years_experience" class="input" min="0">
+      </div>
+
+      <div>
+        <label class="label">Notas relevantes</label>
+        <textarea x-model="form.notes" class="input" rows="3"
+                  placeholder="Lesiones previas, cambios de equipo, etc."></textarea>
+      </div>
+
+      <div x-show="error" x-cloak class="bg-red-50 border border-red-300 text-red-700 p-3 rounded">
+        <span x-text="error"></span>
+      </div>
+
+      <div class="flex gap-3 pt-3">
+        <button type="submit" :disabled="loading"
+                class="btn-primary disabled:opacity-50">
+          <span x-show="!loading">Crear peleador</span>
+          <span x-show="loading">Guardando...</span>
+        </button>
+        <a href="/" class="btn-secondary">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function fighterForm() {
+  return {
+    loading: false,
+    error: '',
+    form: {
+      role: 'our',
+      name: '',
+      sport: 'boxing',
+      country: '',
+      age: null,
+      weight_kg: null,
+      division: '',
+      height_cm: null,
+      reach_cm: null,
+      stance: 'orthodox',
+      wins: 0, losses: 0, draws: 0,
+      ko_wins: 0, sub_wins: 0, ippon_wins: 0,
+      years_experience: null,
+      notes: '',
+    },
+    init() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('role') === 'opponent') this.form.role = 'opponent';
+    },
+    async submit() {
+      this.error = '';
+      this.loading = true;
+      try {
+        const payload = { ...this.form };
+        Object.keys(payload).forEach(k => {
+          if (payload[k] === '' || payload[k] === null) delete payload[k];
+        });
+        const res = await fetch('/api/fighters', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(JSON.stringify(err.detail || err));
+        }
+        const fighter = await res.json();
+        window.location.href = `/fighters/${fighter.id}`;
+      } catch (e) {
+        this.error = e.message;
+      } finally {
+        this.loading = false;
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  combat-analyzer:
+    build: .
+    container_name: combat-analyzer
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/app/uploads
+      - ./reports:/app/reports
+      - ./combat.db:/app/combat.db
+    restart: unless-stopped

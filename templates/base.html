@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Combat Analyzer Pro{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: { 900: '#0B1F3A', 800: '#142C4F', 700: '#1E3A66' },
+            blood: { 500: '#C8102E', 600: '#A60D27' },
+            gold: { 500: '#C9A961', 600: '#B0904D' },
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .card { @apply bg-white rounded-lg shadow-sm border border-gray-200; }
+    .btn-primary {
+      @apply inline-flex items-center gap-2 px-4 py-2 bg-navy-900 hover:bg-navy-800
+             text-white font-semibold rounded-md transition shadow-sm;
+    }
+    .btn-danger {
+      @apply inline-flex items-center gap-2 px-4 py-2 bg-blood-500 hover:bg-blood-600
+             text-white font-semibold rounded-md transition shadow-sm;
+    }
+    .btn-secondary {
+      @apply inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200
+             text-gray-800 font-semibold rounded-md transition;
+    }
+    .input {
+      @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2
+             focus:ring-navy-700 focus:border-navy-700 outline-none;
+    }
+    .label { @apply block text-sm font-semibold text-gray-700 mb-1; }
+    .badge {
+      @apply inline-block px-2 py-0.5 text-xs font-bold rounded-full;
+    }
+    .badge-our { @apply bg-navy-900 text-white; }
+    .badge-opp { @apply bg-blood-500 text-white; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <!-- Header -->
+  <header class="bg-navy-900 text-white shadow-lg">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-blood-500 rounded-md flex items-center justify-center font-black text-xl">
+          C
+        </div>
+        <div>
+          <div class="font-extrabold text-lg leading-tight">COMBAT ANALYZER</div>
+          <div class="text-xs text-gold-500 font-semibold tracking-wider">PRO</div>
+        </div>
+      </a>
+      <nav class="flex items-center gap-2">
+        <a href="/" class="px-3 py-2 hover:bg-navy-800 rounded text-sm font-semibold">
+          Inicio
+        </a>
+        <a href="/fighters/new" class="px-3 py-2 hover:bg-navy-800 rounded text-sm font-semibold">
+          Nuevo peleador
+        </a>
+        <a href="/plan/new" class="btn-primary !bg-blood-500 hover:!bg-blood-600 text-sm">
+          Nuevo plan
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Content -->
+  <main class="max-w-6xl mx-auto px-4 py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-gray-200 mt-16 py-6 text-center text-sm text-gray-500">
+    Combat Analyzer Pro &middot; Plataforma táctica para deportes de combate
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

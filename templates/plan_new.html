@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Nuevo plan de combate{% endblock %}
+
+{% block content %}
+<div x-data="planForm()" x-init="load()">
+  <a href="/" class="text-navy-700 hover:underline">← Volver</a>
+
+  <div class="card p-8 max-w-3xl mx-auto mt-4">
+    <h1 class="text-2xl font-extrabold text-navy-900 mb-2">Generar plan de combate</h1>
+    <p class="text-gray-600 mb-6">
+      Cruza ambos peleadores y genera un plan estratégico completo (planes A/B/C,
+      contramedidas, sparrings y campamento).
+    </p>
+
+    <form @submit.prevent="submit()" class="space-y-5">
+
+      <div>
+        <label class="label">Nuestro peleador *</label>
+        <select x-model.number="form.our_fighter_id" required class="input">
+          <option :value="null">Selecciona...</option>
+          <template x-for="f in ourFighters" :key="f.id">
+            <option :value="f.id" x-text="`${f.name} (${f.sport}, ${f.record_str})`"></option>
+          </template>
+        </select>
+      </div>
+
+      <div>
+        <label class="label">Oponente *</label>
+        <select x-model.number="form.opponent_id" required class="input">
+          <option :value="null">Selecciona...</option>
+          <template x-for="f in opponents" :key="f.id">
+            <option :value="f.id" x-text="`${f.name} (${f.sport}, ${f.record_str})`"></option>
+          </template>
+        </select>
+      </div>
+
+      <div>
+        <label class="label">Motor de IA para estrategia</label>
+        <select x-model="form.engine" class="input">
+          <option value="">Default (Claude)</option>
+          <option value="claude">Claude — mejor razonamiento estratégico</option>
+          <option value="gemini">Gemini</option>
+          <option value="openai">OpenAI GPT-4o</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="label">Contexto adicional (opcional)</label>
+        <textarea x-model="form.additional_context" class="input" rows="4"
+                  placeholder="Información que la IA debe considerar: peleas recientes, lesiones del rival, estilo de su nuevo coach, etc."></textarea>
+      </div>
+
+      <div class="bg-yellow-50 border border-yellow-300 text-yellow-900 p-3 rounded text-sm">
+        <strong>⏱ Importante:</strong> Generar el plan completo puede tardar 1-3 minutos.
+        Si alguno de los peleadores no tiene perfil sintetizado, la IA lo generará primero.
+      </div>
+
+      <div x-show="error" x-cloak class="bg-red-50 border border-red-300 text-red-700 p-3 rounded">
+        <span x-text="error"></span>
+      </div>
+
+      <button type="submit" :disabled="loading || !form.our_fighter_id || !form.opponent_id"
+              class="btn-primary !bg-blood-500 hover:!bg-blood-600 disabled:opacity-50 w-full justify-center text-lg py-3">
+        <span x-show="!loading">⚔️ Generar plan de combate</span>
+        <span x-show="loading">Generando plan estratégico... (esto puede tardar)</span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<script>
+function planForm() {
+  return {
+    ourFighters: [],
+    opponents: [],
+    form: { our_fighter_id: null, opponent_id: null, engine: '', additional_context: '' },
+    loading: false,
+    error: '',
+    async load() {
+      const [our, opp] = await Promise.all([
+        fetch('/api/fighters?role=our').then(r => r.json()),
+        fetch('/api/fighters?role=opponent').then(r => r.json()),
+      ]);
+      this.ourFighters = our;
+      this.opponents = opp;
+    },
+    async submit() {
+      this.error = '';
+      this.loading = true;
+      try {
+        const payload = { ...this.form };
+        if (!payload.engine) delete payload.engine;
+        if (!payload.additional_context) delete payload.additional_context;
+        const res = await fetch('/api/analysis/plan', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const plan = await res.json();
+        window.location.href = `/plan/${plan.id}`;
+      } catch (e) {
+        this.error = e.message;
+      } finally {
+        this.loading = false;
+      }
+    },
+  };
+}
+</script>
+{% endblock %}
