@@ -105,4 +105,4 @@ MAX_VIDEO_SIZE_MB=500
 - App móvil para entrenadores
 
 ## Licencia
-Propietario. Todos los derechos reservados.
+Propietario. Todos los derechos reservados. 
