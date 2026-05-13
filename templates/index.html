@@ -24,34 +24,7 @@
     </div>
   </div>
 
-  <!-- Estado de motores -->
-  <div class="card p-4 mb-8">
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="font-bold text-gray-800">Motores de IA disponibles</h2>
-      <button @click="loadEngines()" class="text-sm text-navy-700 hover:underline">
-        Actualizar
-      </button>
-    </div>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <template x-for="e in engines" :key="e.name">
-        <div class="border rounded-md p-3"
-             :class="e.configured ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-gray-50'">
-          <div class="flex items-center justify-between mb-1">
-            <span class="font-bold uppercase text-sm" x-text="e.name"></span>
-            <span class="text-xs font-bold"
-                  :class="e.configured ? 'text-green-700' : 'text-gray-400'"
-                  x-text="e.configured ? '● ACTIVO' : '○ Sin API key'"></span>
-          </div>
-          <div class="text-xs text-gray-600 flex gap-3">
-            <span x-show="e.video">📹 Video</span>
-            <span x-show="e.strategy">🎯 Estrategia</span>
-            <span x-show="e.vision">👁 Visión</span>
-          </div>
-        </div>
-      </template>
-    </div>
-  </div>
-
+  
   <!-- Listado peleadores -->
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
