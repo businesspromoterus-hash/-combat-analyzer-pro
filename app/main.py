@@ -46,8 +46,8 @@ app.add_middleware(
 )
 
 # Archivos estáticos
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="/app/static"), name="static")
+templates = Jinja2Templates(directory="/app/templates")
 
 # Routers API
 app.include_router(fighters.router)
