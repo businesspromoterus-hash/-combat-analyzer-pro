@@ -1,10 +1,11 @@
 """
 Servicio de análisis: orquesta los motores de IA.
 
-Responsable de:
-- Análisis de una pelea individual (con video o notas)
-- Síntesis de perfil de peleador (agregando análisis individuales)
-- Generación del plan de combate completo (cruzando ambos perfiles)
+ARQUITECTURA DE 2 FASES:
+- FASE 1: Gemini analiza todas las peleas → genera reporte de scouting completo
+- FASE 2: Claude recibe ambos reportes de scouting → construye plan estratégico
+
+El entrenador revisa y confirma el scouting ANTES de que Claude genere el plan.
 """
 import time
 from datetime import datetime
@@ -20,25 +21,24 @@ from app.engines import (
 )
 
 
-# ========== ANÁLISIS DE UNA PELEA ==========
+# ========== ANÁLISIS DE UNA PELEA INDIVIDUAL ==========
 
 async def analyze_fight(
     db: Session,
     fight_id: int,
     engine_name: Optional[str] = None,
 ) -> m.FightAnalysis:
-    """Analiza una pelea individual y guarda el resultado."""
+    """Analiza una pelea individual con Gemini y guarda el resultado."""
     fight = fight_service.get_fight(db, fight_id)
     if not fight:
         raise ValueError(f"Pelea {fight_id} no encontrada")
 
     fighter = fighter_service.get_fighter(db, fight.fighter_id)
     if not fighter:
-        raise ValueError(f"Peleador de la pelea no encontrado")
+        raise ValueError("Peleador de la pelea no encontrado")
 
     engine = get_video_engine(engine_name)
 
-    # Crear registro de análisis en estado PROCESSING
     analysis = m.FightAnalysis(
         fight_id=fight_id,
         engine_used=engine.name,
@@ -50,7 +50,6 @@ async def analyze_fight(
 
     t0 = time.time()
     try:
-        # Determinar fuente del video
         video_source = fight.local_file_path or fight.youtube_url
         if not video_source:
             raise ValueError("La pelea no tiene video ni URL asociados")
@@ -77,14 +76,18 @@ async def analyze_fight(
     return analysis
 
 
-# ========== SÍNTESIS DE PERFIL ==========
+# ========== FASE 1: SCOUTING COMPLETO (GEMINI) ==========
 
-async def synthesize_fighter_profile(
+async def generate_scouting_report(
     db: Session,
     fighter_id: int,
-    engine_name: Optional[str] = None,
-) -> m.FighterProfile:
-    """Sintetiza perfil táctico consolidado a partir de todos los análisis disponibles."""
+) -> m.ScoutingReport:
+    """
+    FASE 1: Gemini analiza TODAS las peleas del peleador y genera
+    un reporte de scouting profesional completo.
+
+    El entrenador debe revisar este reporte ANTES de generar el plan.
+    """
     fighter = fighter_service.get_fighter(db, fighter_id)
     if not fighter:
         raise ValueError(f"Peleador {fighter_id} no encontrado")
@@ -102,7 +105,60 @@ async def synthesize_fighter_profile(
                     continue
 
     if not individual_analyses:
-        # No hay análisis: crear perfil mínimo basado solo en bio
+        raise ValueError(
+            f"{fighter.name} no tiene peleas analizadas aún. "
+            f"Agrega peleas (YouTube o video), analízalas y luego genera el scouting."
+        )
+
+    # Gemini sintetiza todos los análisis en un reporte de scouting
+    engine = get_video_engine("gemini")
+    bio = fighter_service.fighter_to_bio_dict(fighter)
+
+    scouting_data = await engine.synthesize_fighter_profile(
+        fighter_name=fighter.name,
+        sport=fighter.sport.value,
+        individual_analyses=individual_analyses,
+        bio_data=bio,
+    )
+
+    # Guardar en DB
+    report = m.ScoutingReport(
+        fighter_id=fighter_id,
+        report=scouting_data.model_dump(),
+        fights_analyzed=len(individual_analyses),
+        engine_used=engine.name,
+        status="pending",
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    return report
+
+
+# ========== SÍNTESIS DE PERFIL (compatible con flujo anterior) ==========
+
+async def synthesize_fighter_profile(
+    db: Session,
+    fighter_id: int,
+    engine_name: Optional[str] = None,
+) -> m.FighterProfile:
+    """Sintetiza perfil táctico consolidado (mantiene compatibilidad)."""
+    fighter = fighter_service.get_fighter(db, fighter_id)
+    if not fighter:
+        raise ValueError(f"Peleador {fighter_id} no encontrado")
+
+    fights = fight_service.list_fights_for_fighter(db, fighter_id)
+
+    individual_analyses: list[FightAnalysisResult] = []
+    for fight in fights:
+        for a in fight.analyses:
+            if a.status == m.AnalysisStatus.COMPLETED and a.result:
+                try:
+                    individual_analyses.append(FightAnalysisResult(**a.result))
+                except Exception:
+                    continue
+
+    if not individual_analyses:
         bio = fighter_service.fighter_to_bio_dict(fighter)
         profile_data = FighterStyleProfile(
             fighter_name=fighter.name,
@@ -115,8 +171,7 @@ async def synthesize_fighter_profile(
             mental_profile="N/A",
             historical_losses_pattern="N/A",
             matchup_history_vs_similar="N/A",
-            summary=f"Perfil pendiente: aún no hay peleas analizadas para {fighter.name}. "
-                    f"Datos bio: {bio['record']}, {bio.get('division', 'sin división')}.",
+            summary=f"Perfil pendiente: aún no hay peleas analizadas para {fighter.name}.",
         )
         engine_used = "none"
     else:
@@ -130,7 +185,6 @@ async def synthesize_fighter_profile(
         )
         engine_used = engine.name
 
-    # Upsert
     existing = (
         db.query(m.FighterProfile)
         .filter(m.FighterProfile.fighter_id == fighter_id)
@@ -154,7 +208,52 @@ async def synthesize_fighter_profile(
     return profile
 
 
-# ========== PLAN DE COMBATE COMPLETO ==========
+# ========== FASE 2: PLAN ESTRATÉGICO (CLAUDE) ==========
+
+async def generate_fight_plan_from_scouting(
+    db: Session,
+    our_fighter_id: int,
+    opponent_id: int,
+    our_scouting: m.ScoutingReport,
+    opp_scouting: m.ScoutingReport,
+    additional_context: Optional[str] = None,
+) -> m.FightPlan:
+    """
+    FASE 2: Claude recibe los reportes de scouting de ambos peleadores
+    y construye el plan estratégico completo.
+    """
+    our_fighter = fighter_service.get_fighter(db, our_fighter_id)
+    opponent = fighter_service.get_fighter(db, opponent_id)
+    if not our_fighter or not opponent:
+        raise ValueError("Uno de los peleadores no existe")
+
+    engine = get_strategy_engine("claude")
+
+    our_profile = FighterStyleProfile(**our_scouting.report)
+    opp_profile = FighterStyleProfile(**opp_scouting.report)
+
+    plan_data: CompleteFightPlan = await engine.generate_fight_plan(
+        our_profile=our_profile,
+        our_bio=fighter_service.fighter_to_bio_dict(our_fighter),
+        opponent_profile=opp_profile,
+        opponent_bio=fighter_service.fighter_to_bio_dict(opponent),
+        sport=our_fighter.sport.value,
+        additional_context=additional_context,
+    )
+
+    plan = m.FightPlan(
+        our_fighter_id=our_fighter_id,
+        opponent_id=opponent_id,
+        plan=plan_data.model_dump(),
+        engine_used=engine.name,
+    )
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+    return plan
+
+
+# ========== PLAN COMPLETO (flujo anterior, mantiene compatibilidad) ==========
 
 async def generate_fight_plan(
     db: Session,
@@ -163,13 +262,12 @@ async def generate_fight_plan(
     engine_name: Optional[str] = None,
     additional_context: Optional[str] = None,
 ) -> m.FightPlan:
-    """Genera plan estratégico completo."""
+    """Plan estratégico completo (flujo anterior — mantiene compatibilidad)."""
     our_fighter = fighter_service.get_fighter(db, our_fighter_id)
     opponent = fighter_service.get_fighter(db, opponent_id)
     if not our_fighter or not opponent:
         raise ValueError("Uno de los peleadores no existe")
 
-    # Asegurar que ambos tengan perfil sintetizado (si no, generarlo)
     our_profile_record = (
         db.query(m.FighterProfile)
         .filter(m.FighterProfile.fighter_id == our_fighter_id)
@@ -186,7 +284,6 @@ async def generate_fight_plan(
     if not opp_profile_record:
         opp_profile_record = await synthesize_fighter_profile(db, opponent_id, engine_name)
 
-    # Generar plan
     engine = get_strategy_engine(engine_name)
     our_profile = FighterStyleProfile(**our_profile_record.profile)
     opp_profile = FighterStyleProfile(**opp_profile_record.profile)

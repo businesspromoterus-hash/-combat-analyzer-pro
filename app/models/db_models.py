@@ -1,9 +1,11 @@
 """
-Modelos SQLAlchemy: peleadores, peleas, análisis y planes de combate.
+Modelos SQLAlchemy — con autenticación multi-usuario.
+Cada entrenador tiene su cuenta y solo ve sus propios datos.
 """
 from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, String, Float, Text, DateTime, ForeignKey, JSON, Enum as SAEnum
+    Column, Integer, String, Float, Text, DateTime,
+    ForeignKey, JSON, Enum as SAEnum, Boolean
 )
 from sqlalchemy.orm import relationship
 import enum
@@ -11,30 +13,68 @@ import enum
 from app.core.database import Base
 
 
+# ========== USUARIO / ENTRENADOR ==========
+
+class User(Base):
+    """Cuenta de entrenador. Cada usuario tiene sus propios peleadores y planes."""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    hashed_password = Column(String(500), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relaciones
+    fighters = relationship("Fighter", back_populates="owner", cascade="all, delete-orphan")
+    sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
+
+
+class UserSession(Base):
+    """Sesiones activas de usuario."""
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token = Column(String(200), unique=True, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+
+    user = relationship("User", back_populates="sessions")
+
+    @property
+    def is_valid(self) -> bool:
+        return datetime.utcnow() < self.expires_at
+
+
+# ========== ENUMS ==========
+
 class FighterRole(str, enum.Enum):
-    """Nuestro peleador vs oponente."""
     OUR = "our"
     OPPONENT = "opponent"
 
 
 class CombatSport(str, enum.Enum):
-    BOXING = "boxing"
-    MMA = "mma"
-    JUDO = "judo"
-    KICKBOXING = "kickboxing"
-    MUAY_THAI = "muay_thai"
-    BJJ = "bjj"
-    KARATE = "karate"
-    TAEKWONDO = "taekwondo"
-    WRESTLING = "wrestling"
-    OTHER = "other"
+    BOXING = "boxing"           # Boxeo
+    MMA = "mma"                 # MMA
+    BKFC = "bkfc"               # BKFC — Bare Knuckle
+    KICKBOXING = "kickboxing"   # Kickboxing
+    MUAY_THAI = "muay_thai"     # Muay Thai
+    BJJ = "bjj"                 # BJJ — Brazilian Jiu-Jitsu
+    JUDO = "judo"               # Judo
+    KARATE = "karate"           # Karate
+    KARATE_COMBAT = "karate_combat"  # Karate Combat
+    TAEKWONDO = "taekwondo"     # Taekwondo
+    WRESTLING = "wrestling"     # Lucha
+    OTHER = "other"             # Otro
 
 
 class Stance(str, enum.Enum):
-    ORTHODOX = "orthodox"     # diestro
-    SOUTHPAW = "southpaw"      # zurdo
+    ORTHODOX = "orthodox"
+    SOUTHPAW = "southpaw"
     SWITCH = "switch"
-    NA = "na"                  # judo / lucha
+    NA = "na"
 
 
 class AnalysisStatus(str, enum.Enum):
@@ -50,37 +90,32 @@ class Fighter(Base):
     __tablename__ = "fighters"
 
     id = Column(Integer, primary_key=True, index=True)
-    role = Column(SAEnum(FighterRole), nullable=False, index=True)
 
-    # Identidad
+    # Dueño del peleador — cada entrenador ve solo los suyos
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)  # nullable hasta cablear ownership en los routers
+
+    role = Column(SAEnum(FighterRole), nullable=False, index=True)
     name = Column(String(200), nullable=False)
     sport = Column(SAEnum(CombatSport), nullable=False)
     country = Column(String(100), nullable=True)
-
-    # Datos físicos
     age = Column(Integer, nullable=True)
     weight_kg = Column(Float, nullable=True)
     division = Column(String(100), nullable=True)
     height_cm = Column(Float, nullable=True)
     reach_cm = Column(Float, nullable=True)
     stance = Column(SAEnum(Stance), default=Stance.ORTHODOX)
-
-    # Récord y experiencia
     wins = Column(Integer, default=0)
     losses = Column(Integer, default=0)
     draws = Column(Integer, default=0)
-    ko_wins = Column(Integer, default=0)        # boxeo/MMA
-    sub_wins = Column(Integer, default=0)        # MMA/BJJ
-    ippon_wins = Column(Integer, default=0)      # judo
+    ko_wins = Column(Integer, default=0)
+    sub_wins = Column(Integer, default=0)
+    ippon_wins = Column(Integer, default=0)
     years_experience = Column(Integer, nullable=True)
-
-    # Notas libres del entrenador
     notes = Column(Text, nullable=True)
-
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relaciones
+    owner = relationship("User", back_populates="fighters")
     fights = relationship("Fight", back_populates="fighter", cascade="all, delete-orphan")
 
     @property
@@ -88,95 +123,84 @@ class Fighter(Base):
         return f"{self.wins}-{self.losses}-{self.draws}"
 
 
-# ========== FIGHT (cada video/link de pelea analizado) ==========
+# ========== FIGHT ==========
 
 class Fight(Base):
     __tablename__ = "fights"
 
     id = Column(Integer, primary_key=True, index=True)
     fighter_id = Column(Integer, ForeignKey("fighters.id", ondelete="CASCADE"), nullable=False)
-
-    # Origen del video
     youtube_url = Column(String(500), nullable=True)
     local_file_path = Column(String(500), nullable=True)
     title = Column(String(300), nullable=True)
     opponent_name = Column(String(200), nullable=True)
-    result = Column(String(50), nullable=True)   # "win-ko-r2", "loss-decision", etc.
+    result = Column(String(50), nullable=True)
     fight_date = Column(String(20), nullable=True)
-
-    # Metadata extraída
     duration_seconds = Column(Integer, nullable=True)
     transcript = Column(Text, nullable=True)
     raw_metadata = Column(JSON, nullable=True)
-
-    # Notas manuales del entrenador
     coach_notes = Column(Text, nullable=True)
-
     created_at = Column(DateTime, default=datetime.utcnow)
 
     fighter = relationship("Fighter", back_populates="fights")
     analyses = relationship("FightAnalysis", back_populates="fight", cascade="all, delete-orphan")
 
 
-# ========== ANALYSIS (resultado del motor de IA) ==========
+# ========== FIGHT ANALYSIS ==========
 
 class FightAnalysis(Base):
-    """Análisis de una pelea individual por un motor de IA."""
     __tablename__ = "fight_analyses"
 
     id = Column(Integer, primary_key=True, index=True)
     fight_id = Column(Integer, ForeignKey("fights.id", ondelete="CASCADE"), nullable=False)
-
-    engine_used = Column(String(50), nullable=False)   # "gemini", "claude", "openai"
+    engine_used = Column(String(50), nullable=False)
     status = Column(SAEnum(AnalysisStatus), default=AnalysisStatus.PENDING)
-
-    # Resultado estructurado (JSON con todos los campos del análisis)
-    # strengths, weaknesses, patterns, favorite_techniques, defensive_errors,
-    # cardio, pressure_response, late_rounds, key_moments, etc.
     result = Column(JSON, nullable=True)
-
     error_message = Column(Text, nullable=True)
     tokens_used = Column(Integer, nullable=True)
     duration_seconds = Column(Float, nullable=True)
-
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
 
     fight = relationship("Fight", back_populates="analyses")
 
 
-# ========== FIGHTER PROFILE (agregado de todos sus análisis) ==========
+# ========== FIGHTER PROFILE ==========
 
 class FighterProfile(Base):
-    """Perfil táctico consolidado de un peleador (síntesis de múltiples peleas)."""
     __tablename__ = "fighter_profiles"
 
     id = Column(Integer, primary_key=True, index=True)
     fighter_id = Column(Integer, ForeignKey("fighters.id", ondelete="CASCADE"), unique=True)
-
-    # Síntesis estructurada
-    profile = Column(JSON, nullable=False)   # estilo, fortalezas, debilidades, patrones, etc.
+    profile = Column(JSON, nullable=False)
     engine_used = Column(String(50), nullable=False)
-
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-# ========== FIGHT PLAN (plan completo de combate) ==========
+# ========== SCOUTING REPORT ==========
+
+class ScoutingReport(Base):
+    __tablename__ = "scouting_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    fighter_id = Column(Integer, ForeignKey("fighters.id", ondelete="CASCADE"), nullable=False, index=True)
+    report = Column(JSON, nullable=False)
+    fights_analyzed = Column(Integer, default=0)
+    engine_used = Column(String(50), nullable=False, default="gemini")
+    status = Column(String(20), default="pending")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ========== FIGHT PLAN ==========
 
 class FightPlan(Base):
-    """Plan estratégico completo: nuestro plan + plan del rival + contramedidas + sparrings + campamento."""
     __tablename__ = "fight_plans"
 
     id = Column(Integer, primary_key=True, index=True)
     our_fighter_id = Column(Integer, ForeignKey("fighters.id", ondelete="CASCADE"), nullable=False)
     opponent_id = Column(Integer, ForeignKey("fighters.id", ondelete="CASCADE"), nullable=False)
-
-    # Plan estructurado (JSON con todas las secciones)
     plan = Column(JSON, nullable=False)
     engine_used = Column(String(50), nullable=False)
-
-    # PDF generado
     pdf_path = Column(String(500), nullable=True)
-
     created_at = Column(DateTime, default=datetime.utcnow)

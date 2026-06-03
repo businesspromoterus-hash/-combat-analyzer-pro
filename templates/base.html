@@ -6,6 +6,7 @@
   <title>{% block title %}Combat Analyzer Pro{% endblock %}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/static/translations.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>
@@ -75,6 +76,15 @@
         <a href="/plan/new" class="btn-primary !bg-blood-500 hover:!bg-blood-600 text-sm">
           Nuevo plan
         </a>
+        <form action="/logout" method="post" class="inline">
+          <button type="submit" class="px-3 py-2 hover:bg-navy-800 rounded text-sm font-semibold">
+            Salir
+          </button>
+        </form>
+        <span class="ml-2 flex items-center gap-1 text-xs">
+          <button type="button" onclick="setLanguage('es')" class="px-2 py-1 hover:bg-navy-800 rounded font-bold">ES</button>
+          <button type="button" onclick="setLanguage('en')" class="px-2 py-1 hover:bg-navy-800 rounded font-bold">EN</button>
+        </span>
       </nav>
     </div>
   </header>
@@ -90,5 +100,6 @@
   </footer>
 
   {% block scripts %}{% endblock %}
+  <script>window.addEventListener('DOMContentLoaded', applyTranslations);</script>
 </body>
 </html>
