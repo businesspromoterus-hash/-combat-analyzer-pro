@@ -13,6 +13,7 @@ from app.core.database import engine, get_db
 from app.models import db_models as m
 from app.api import fighters, fights, analysis, pages
 from app.api.auth import router as auth_router, get_current_user_optional, COOKIE_NAME
+from app.api.fighter_search import router as search_router
 
 
 # ── Crear tablas al arrancar ──────────────────────────────────────────────────
@@ -41,6 +42,7 @@ app.include_router(auth_router)
 app.include_router(fighters.router)
 app.include_router(fights.router)
 app.include_router(analysis.router)
+app.include_router(search_router)
 app.include_router(pages.router)
 
 

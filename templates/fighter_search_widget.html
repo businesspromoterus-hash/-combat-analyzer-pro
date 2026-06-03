@@ -1,0 +1,271 @@
+<!--
+  Widget de búsqueda automática de peleadores.
+  
+  USAR EN: templates/fighter_form.html
+  Reemplaza o agrega ANTES del formulario normal.
+  
+  FLUJO:
+  1. Entrenador escribe el nombre
+  2. App busca automáticamente
+  3. Muestra resultados para que el entrenador elija
+  4. Si elige uno → llena el formulario automáticamente
+  5. Si no hay resultados → muestra el formulario manual
+  6. El entrenador puede editar cualquier dato antes de guardar
+-->
+
+<div x-data="fighterSearch()" class="mb-6">
+
+  <!-- Buscador -->
+  <div class="card p-5 mb-4" x-show="!manualMode && !confirmed">
+    <h3 class="font-bold text-gray-800 mb-1">🔍 Buscar peleador</h3>
+    <p class="text-sm text-gray-500 mb-3">
+      Escribe el nombre y buscamos los datos automáticamente.
+      Si no lo encontramos, puedes ingresar todo a mano.
+    </p>
+
+    <div class="flex gap-2">
+      <input
+        type="text"
+        x-model="searchName"
+        @keydown.enter="search()"
+        placeholder="Ej: Robeisy Ramirez, Canelo Alvarez, Israel Adesanya..."
+        class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500"
+        :disabled="searching">
+      <button @click="search()" :disabled="searching || !searchName.trim()"
+        class="btn-primary px-4 py-2 text-sm whitespace-nowrap">
+        <span x-show="!searching">Buscar</span>
+        <span x-show="searching">Buscando...</span>
+      </button>
+    </div>
+
+    <!-- Separador manual -->
+    <div class="mt-3 text-center">
+      <button @click="manualMode = true" class="text-xs text-gray-400 hover:text-gray-600 underline">
+        Prefiero ingresar los datos manualmente
+      </button>
+    </div>
+  </div>
+
+  <!-- Resultados de búsqueda -->
+  <div x-show="results.length > 0 && !confirmed" class="space-y-3 mb-4">
+    <p class="text-sm font-medium text-gray-700">
+      Encontré <span x-text="results.length"></span> resultado(s). ¿Cuál es tu peleador?
+    </p>
+
+    <template x-for="(r, i) in results" :key="i">
+      <div class="card p-4 cursor-pointer hover:border-navy-400 hover:shadow-md transition-all border-2"
+           :class="selectedIndex === i ? 'border-navy-600 bg-navy-50' : 'border-gray-200'"
+           @click="selectResult(i)">
+
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="font-bold text-gray-900" x-text="r.name"></div>
+            <div class="text-sm text-gray-600 mt-0.5">
+              <span x-text="r.sport || 'Deporte desconocido'"></span>
+              <span x-show="r.country"> · <span x-text="r.country"></span></span>
+              <span x-show="r.division"> · <span x-text="r.division"></span></span>
+            </div>
+            <div class="text-sm text-gray-700 mt-1" x-show="r.wins !== null">
+              Récord: <strong x-text="(r.wins||0) + '-' + (r.losses||0) + '-' + (r.draws||0)"></strong>
+              <span x-show="r.ko_wins"> · <span x-text="r.ko_wins"></span> KOs</span>
+            </div>
+            <div class="text-sm text-gray-600 mt-1 italic" x-show="r.style_summary" x-text="r.style_summary"></div>
+          </div>
+
+          <!-- Indicador de confianza -->
+          <div class="text-right flex-shrink-0 ml-3">
+            <div class="text-xs text-gray-400">Confianza</div>
+            <div class="text-sm font-bold"
+                 :class="r.confidence > 0.7 ? 'text-green-600' : r.confidence > 0.4 ? 'text-yellow-600' : 'text-red-500'"
+                 x-text="Math.round(r.confidence * 100) + '%'">
+            </div>
+          </div>
+        </div>
+
+        <!-- Peleas notables -->
+        <div x-show="r.notable_fights && r.notable_fights.length" class="mt-2">
+          <div class="text-xs text-gray-500">Peleas notables:</div>
+          <div class="flex flex-wrap gap-1 mt-1">
+            <template x-for="fight in (r.notable_fights || []).slice(0,4)" :key="fight">
+              <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full" x-text="fight"></span>
+            </template>
+          </div>
+        </div>
+
+        <!-- Fuente -->
+        <div x-show="r.source_notes" class="mt-1 text-xs text-gray-400" x-text="'Fuente: ' + r.source_notes"></div>
+      </div>
+    </template>
+
+    <!-- Botones de acción -->
+    <div class="flex gap-2 mt-2" x-show="selectedIndex !== null">
+      <button @click="confirmSelection()"
+        class="btn-primary flex-1 py-2 text-sm">
+        ✓ Sí, es este peleador — usar estos datos
+      </button>
+    </div>
+
+    <div class="text-center mt-2">
+      <button @click="manualMode = true; results = []" class="text-xs text-gray-400 hover:text-gray-600 underline">
+        Ninguno es el peleador que busco — ingresar manualmente
+      </button>
+    </div>
+  </div>
+
+  <!-- No encontrado -->
+  <div x-show="searched && results.length === 0 && !manualMode && !confirmed"
+       class="card p-4 mb-4 border-yellow-200 bg-yellow-50">
+    <p class="text-sm text-yellow-800 font-medium">
+      No encontré información sobre "<span x-text="searchName"></span>".
+    </p>
+    <p class="text-sm text-yellow-700 mt-1">
+      Puede que sea un peleador nuevo, amateur, o con poca presencia en internet.
+      Puedes ingresar todos los datos manualmente.
+    </p>
+    <button @click="manualMode = true"
+      class="mt-3 btn-primary text-sm py-2 px-4">
+      Ingresar datos manualmente
+    </button>
+  </div>
+
+  <!-- Confirmación: datos encontrados listos para revisar -->
+  <div x-show="confirmed" class="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
+    <p class="text-sm text-green-800 font-medium">
+      ✓ Datos cargados automáticamente para <strong x-text="confirmedName"></strong>.
+      Revisa y edita lo que necesites antes de guardar.
+    </p>
+    <button @click="resetSearch()" class="mt-1 text-xs text-green-600 underline">
+      Buscar otro peleador
+    </button>
+  </div>
+
+</div>
+
+<script>
+function fighterSearch() {
+  return {
+    searchName: '',
+    searching: false,
+    searched: false,
+    results: [],
+    selectedIndex: null,
+    manualMode: false,
+    confirmed: false,
+    confirmedName: '',
+
+    async search() {
+      if (!this.searchName.trim()) return;
+      this.searching = true;
+      this.searched = false;
+      this.results = [];
+      this.selectedIndex = null;
+
+      try {
+        const r = await fetch('/api/fighters/search/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: this.searchName }),
+        });
+        const data = await r.json();
+        this.results = data.results || [];
+        this.searched = true;
+
+        // Si solo hay 1 resultado con alta confianza, preseleccionarlo
+        if (this.results.length === 1 && this.results[0].confidence > 0.8) {
+          this.selectedIndex = 0;
+        }
+      } catch (e) {
+        this.results = [];
+        this.searched = true;
+      } finally {
+        this.searching = false;
+      }
+    },
+
+    selectResult(i) {
+      this.selectedIndex = i;
+    },
+
+    confirmSelection() {
+      if (this.selectedIndex === null) return;
+      const r = this.results[this.selectedIndex];
+      this.confirmedName = r.name;
+
+      // Llenar el formulario con los datos encontrados
+      this.fillForm(r);
+      this.confirmed = true;
+      this.results = [];
+    },
+
+    fillForm(r) {
+      // Llenar cada campo del formulario si tiene valor
+      const fields = {
+        'name': r.name,
+        'country': r.country,
+        'age': r.age,
+        'weight_kg': r.weight_kg,
+        'division': r.division,
+        'height_cm': r.height_cm,
+        'reach_cm': r.reach_cm,
+        'wins': r.wins,
+        'losses': r.losses,
+        'draws': r.draws,
+        'ko_wins': r.ko_wins,
+        'sub_wins': r.sub_wins,
+        'years_experience': r.years_experience,
+      };
+
+      // Llenar campos de texto normales
+      for (const [fieldName, value] of Object.entries(fields)) {
+        if (value !== null && value !== undefined) {
+          const el = document.querySelector(`[name="${fieldName}"], #${fieldName}`);
+          if (el) el.value = value;
+        }
+      }
+
+      // Llenar sport (select)
+      if (r.sport) {
+        const sportEl = document.querySelector('[name="sport"], #sport');
+        if (sportEl) sportEl.value = r.sport;
+      }
+
+      // Llenar stance (select)
+      if (r.stance) {
+        const stanceEl = document.querySelector('[name="stance"], #stance');
+        if (stanceEl) stanceEl.value = r.stance;
+      }
+
+      // Llenar notas con info táctica
+      let notes = '';
+      if (r.style_summary) notes += `Estilo: ${r.style_summary}\n\n`;
+      if (r.known_strengths?.length) notes += `Fortalezas conocidas:\n${r.known_strengths.map(s => `• ${s}`).join('\n')}\n\n`;
+      if (r.known_weaknesses?.length) notes += `Debilidades conocidas:\n${r.known_weaknesses.map(w => `• ${w}`).join('\n')}\n\n`;
+      if (r.current_trainer) notes += `Entrenador: ${r.current_trainer}\n`;
+      if (r.gym) notes += `Gimnasio: ${r.gym}\n`;
+      if (r.source_notes) notes += `\nFuente: ${r.source_notes}`;
+
+      if (notes) {
+        const notesEl = document.querySelector('[name="notes"], #notes, textarea[name="notes"]');
+        if (notesEl) notesEl.value = notes.trim();
+      }
+
+      // Disparar evento para frameworks reactivos (Alpine.js)
+      document.querySelectorAll('input, select, textarea').forEach(el => {
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    },
+
+    resetSearch() {
+      this.searchName = '';
+      this.searching = false;
+      this.searched = false;
+      this.results = [];
+      this.selectedIndex = null;
+      this.manualMode = false;
+      this.confirmed = false;
+      this.confirmedName = '';
+    }
+  };
+}
+</script>
