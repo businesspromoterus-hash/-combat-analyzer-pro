@@ -56,16 +56,18 @@ class FighterRole(str, enum.Enum):
 
 
 class CombatSport(str, enum.Enum):
-    BOXING = "boxing"
-    MMA = "mma"
-    JUDO = "judo"
-    KICKBOXING = "kickboxing"
-    MUAY_THAI = "muay_thai"
-    BJJ = "bjj"
-    KARATE = "karate"
-    TAEKWONDO = "taekwondo"
-    WRESTLING = "wrestling"
-    OTHER = "other"
+    BOXING = "boxing"           # Boxeo
+    MMA = "mma"                 # MMA
+    BKFC = "bkfc"               # BKFC — Bare Knuckle
+    KICKBOXING = "kickboxing"   # Kickboxing
+    MUAY_THAI = "muay_thai"     # Muay Thai
+    BJJ = "bjj"                 # BJJ — Brazilian Jiu-Jitsu
+    JUDO = "judo"               # Judo
+    KARATE = "karate"           # Karate
+    KARATE_COMBAT = "karate_combat"  # Karate Combat
+    TAEKWONDO = "taekwondo"     # Taekwondo
+    WRESTLING = "wrestling"     # Lucha
+    OTHER = "other"             # Otro
 
 
 class Stance(str, enum.Enum):
