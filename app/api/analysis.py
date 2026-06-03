@@ -1,5 +1,5 @@
-"""Endpoints de análisis IA: pelea, perfil sintetizado y plan completo."""
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+"""Endpoints de análisis IA: pelea, scouting completo, perfil y plan."""
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pathlib import Path
@@ -26,7 +26,7 @@ def get_engines():
 @router.post("/fight", response_model=s.AnalysisOut)
 async def analyze_fight(req: s.AnalysisRequest, db: Session = Depends(get_db)):
     """
-    Analiza una pelea con el motor especificado (o el default).
+    Analiza una pelea individual con Gemini.
     Operación síncrona: devuelve cuando termina (puede tardar minutos).
     """
     try:
@@ -48,7 +48,40 @@ def get_fight_analyses(fight_id: int, db: Session = Depends(get_db)):
     )
 
 
-# ========== SÍNTESIS DE PERFIL ==========
+# ========== SCOUTING COMPLETO (NUEVO) ==========
+
+@router.post("/scouting/{fighter_id}", response_model=s.ScoutingReportOut)
+async def generate_scouting(fighter_id: int, db: Session = Depends(get_db)):
+    """
+    FASE 1: Gemini analiza TODAS las peleas del peleador y genera
+    un reporte de scouting profesional completo.
+    
+    Este reporte debe revisarse y confirmarse ANTES de generar el plan.
+    """
+    try:
+        report = await analysis_service.generate_scouting_report(db, fighter_id)
+        return report
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"{type(e).__name__}: {e}")
+
+
+@router.get("/scouting/{fighter_id}", response_model=s.ScoutingReportOut)
+def get_scouting(fighter_id: int, db: Session = Depends(get_db)):
+    """Obtiene el último reporte de scouting guardado para un peleador."""
+    report = (
+        db.query(m.ScoutingReport)
+        .filter(m.ScoutingReport.fighter_id == fighter_id)
+        .order_by(m.ScoutingReport.created_at.desc())
+        .first()
+    )
+    if not report:
+        raise HTTPException(404, "Scouting no generado aún")
+    return report
+
+
+# ========== PERFIL SINTETIZADO ==========
 
 @router.post("/profile", response_model=s.FighterProfileOut)
 async def synthesize_profile(req: s.ProfileSynthesisRequest, db: Session = Depends(get_db)):
@@ -78,13 +111,44 @@ def get_profile(fighter_id: int, db: Session = Depends(get_db)):
 
 @router.post("/plan", response_model=s.FightPlanOut)
 async def create_fight_plan(req: s.FightPlanRequest, db: Session = Depends(get_db)):
-    """Genera el plan de combate completo cruzando ambos peleadores."""
+    """
+    FASE 2: Claude toma los reportes de scouting de ambos peleadores
+    y construye el plan estratégico completo.
+    
+    Requiere que ambos peleadores tengan scouting generado y confirmado.
+    """
     try:
-        plan = await analysis_service.generate_fight_plan(
+        # Verificar que ambos peleadores tienen scouting
+        our_scouting = (
+            db.query(m.ScoutingReport)
+            .filter(m.ScoutingReport.fighter_id == req.our_fighter_id)
+            .order_by(m.ScoutingReport.created_at.desc())
+            .first()
+        )
+        opp_scouting = (
+            db.query(m.ScoutingReport)
+            .filter(m.ScoutingReport.fighter_id == req.opponent_id)
+            .order_by(m.ScoutingReport.created_at.desc())
+            .first()
+        )
+
+        if not our_scouting:
+            raise ValueError(
+                "Nuestro peleador no tiene scouting generado. "
+                "Ve al perfil del peleador y genera el scouting primero."
+            )
+        if not opp_scouting:
+            raise ValueError(
+                "El oponente no tiene scouting generado. "
+                "Ve al perfil del oponente y genera el scouting primero."
+            )
+
+        plan = await analysis_service.generate_fight_plan_from_scouting(
             db,
             our_fighter_id=req.our_fighter_id,
             opponent_id=req.opponent_id,
-            engine_name=req.engine,
+            our_scouting=our_scouting,
+            opp_scouting=opp_scouting,
             additional_context=req.additional_context,
         )
 
@@ -119,7 +183,6 @@ def download_plan_pdf(plan_id: int, db: Session = Depends(get_db)):
     if not plan:
         raise HTTPException(404, "Plan no encontrado")
     if not plan.pdf_path or not Path(plan.pdf_path).exists():
-        # Generar PDF si no existe
         from app.services import fighter_service as fs
         our = fs.get_fighter(db, plan.our_fighter_id)
         opp = fs.get_fighter(db, plan.opponent_id)

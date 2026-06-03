@@ -3,7 +3,7 @@ Esquemas Pydantic para validación de API.
 """
 from datetime import datetime
 from typing import Optional, List, Any
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 
 from app.models.db_models import FighterRole, CombatSport, Stance, AnalysisStatus
 
@@ -89,7 +89,7 @@ class FightOut(BaseModel):
 
 class AnalysisRequest(BaseModel):
     fight_id: int
-    engine: Optional[str] = None    # "gemini", "claude", "openai" — None = default
+    engine: Optional[str] = None
 
 
 class AnalysisOut(BaseModel):
@@ -105,7 +105,7 @@ class AnalysisOut(BaseModel):
         from_attributes = True
 
 
-# ========== FIGHTER PROFILE (síntesis) ==========
+# ========== FIGHTER PROFILE ==========
 
 class ProfileSynthesisRequest(BaseModel):
     fighter_id: int
@@ -118,6 +118,21 @@ class FighterProfileOut(BaseModel):
     profile: dict
     engine_used: str
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ========== SCOUTING REPORT (NUEVO) ==========
+
+class ScoutingReportOut(BaseModel):
+    id: int
+    fighter_id: int
+    report: dict
+    fights_analyzed: int
+    engine_used: str
+    status: str
+    created_at: datetime
 
     class Config:
         from_attributes = True
