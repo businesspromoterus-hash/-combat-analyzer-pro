@@ -1,12 +1,17 @@
 """
-Motor Gemini: análisis de video de peleas.
-Modelo: gemini-2.0-flash (estable, soporta video/YouTube)
+Motor Gemini: análisis enriquecido con datos de internet + video.
+Modelo: gemini-2.0-flash
+
+FLUJO:
+1. Claude busca en internet todo lo que existe sobre el peleador
+2. Gemini recibe el video + esa información como contexto
+3. El scouting combina lo visto en video + lo conocido públicamente
 """
 import json
 import re
 import asyncio
 from typing import Optional
-
+import anthropic
 import google.generativeai as genai
 
 from app.core.config import settings
@@ -16,194 +21,316 @@ from app.engines.base import (
     FighterStyleProfile,
 )
 
-# ── Prompt de análisis de pelea individual ────────────────────────────────────
-FIGHT_ANALYSIS_PROMPT = """
-Eres un analista de deportes de combate de élite. Observa este video de pelea
-con atención al detalle de un scout profesional.
+
+# ── Prompt de búsqueda web (Claude busca info del peleador) ──────────────────
+
+WEB_RESEARCH_PROMPT = """
+Busca información pública sobre el peleador: "{fighter_name}" ({sport}).
+
+Necesito toda la información disponible en internet:
+- Estilo de pelea conocido públicamente
+- Fortalezas y debilidades mencionadas por expertos y analistas
+- Historial de peleas completo — contra quién ganó, contra quién perdió y por qué
+- Cambios de entrenador o gimnasio
+- Lesiones conocidas
+- Lo que el mismo peleador ha dicho en entrevistas sobre su estilo
+- Estadísticas públicas (CompuBox, Tapology, Sherdog, etc.)
+- Análisis de expertos y comentaristas
+- Cualquier información táctica relevante
+
+Sé específico y detallado. Solo incluye información que realmente encontraste.
+
+Responde en formato JSON:
+{{
+  "fighter_name": "{fighter_name}",
+  "sport": "{sport}",
+  "public_style_description": "descripción del estilo según fuentes públicas",
+  "publicly_known_strengths": ["fortaleza 1 según expertos", "fortaleza 2"],
+  "publicly_known_weaknesses": ["debilidad 1 conocida", "debilidad 2"],
+  "loss_patterns": "análisis de sus derrotas — qué tipo de peleador lo derrota",
+  "win_patterns": "análisis de sus victorias — cómo suele ganar",
+  "training_background": "entrenador actual, gimnasio, sistema de entrenamiento",
+  "injuries_known": "lesiones conocidas que puedan afectar su rendimiento",
+  "fighter_own_words": "lo que el peleador ha dicho sobre su estilo en entrevistas",
+  "expert_analysis": "lo que analistas y comentaristas dicen de él",
+  "recent_form": "forma reciente — últimas peleas y tendencia",
+  "additional_context": "cualquier información adicional relevante",
+  "sources_consulted": ["fuente 1", "fuente 2"]
+}}
+
+Solo JSON, sin markdown.
+""".strip()
+
+
+# ── Prompt de análisis de video con contexto enriquecido ─────────────────────
+
+ENRICHED_FIGHT_ANALYSIS_PROMPT = """
+Eres un analista de deportes de combate de élite con acceso al video completo.
 
 PELEADOR A ANALIZAR: {fighter_name}
 DEPORTE: {sport}
 {coach_notes_block}
 
-Genera un análisis técnico-táctico COMPLETO y PROFUNDO en formato JSON.
-Sé extremadamente específico — menciona momentos concretos del video.
+════════════════════════════════════════
+CONTEXTO DE INTERNET — LO QUE SE SABE PÚBLICAMENTE:
+{web_context}
+════════════════════════════════════════
+
+INSTRUCCIÓN CRÍTICA — TIMESTAMPS:
+Para CADA observación táctica positiva o negativa DEBES indicar:
+- En qué ROUND ocurre
+- En qué MINUTO aproximado (ej: "Round 3, min 1:20")
+- Si es patrón repetido, menciona TODOS los momentos
+
+INSTRUCCIÓN DE ENRIQUECIMIENTO:
+Cuando observes algo en el video, indica si:
+- CONFIRMA lo que se sabe públicamente — ej: "Confirma su reputación de buen jab"
+- CONTRADICE lo conocido — ej: "Contrario a lo reportado, su cardio se ve sólido en rounds tardíos"
+- ES NUEVO — ej: "Nuevo patrón no reportado: usa más el gancho al cuerpo"
+
+Genera el análisis completo en JSON:
 
 {{
   "fighter_name": "{fighter_name}",
   "fight_summary": "resumen de la pelea y resultado",
 
+  "context_validation": {{
+    "confirms_public_knowledge": ["observación 1 que confirma lo conocido con timestamp", "observación 2"],
+    "contradicts_public_knowledge": ["observación que contradice lo conocido con timestamp"],
+    "new_discoveries": ["patrón nuevo no reportado públicamente con timestamp"]
+  }},
+
   "offensive_patterns": {{
-    "favorite_strikes": ["lista detallada de golpes/técnicas favoritas con combinaciones exactas"],
-    "entry_patterns": ["cómo entra al ataque — distancia, fintas, paso previo"],
-    "combination_sequences": ["secuencias de combinaciones más usadas, ej: jab-cross-gancho-bajo"],
-    "clinch_offense": "qué hace en el clinch ofensivamente",
-    "takedown_offense": "intentos de derribo — técnica, timing, setup",
-    "ground_offense": "trabajo en suelo si aplica"
+    "favorite_strikes": [
+      "Técnica — Round X min Y:ZZ — confirma/contradice/nuevo"
+    ],
+    "entry_patterns": ["patrón con timestamp"],
+    "combination_sequences": ["combinación con timestamp"],
+    "clinch_offense": "descripción con timestamps",
+    "takedown_offense": "descripción con timestamps si aplica",
+    "ground_offense": "descripción con timestamps si aplica"
   }},
 
   "defensive_patterns": {{
-    "primary_defense": "sistema defensivo principal (bloqueo, parry, slip, etc.)",
-    "head_movement": "tipo y calidad del movimiento de cabeza",
-    "footwork_defense": "cómo usa el movimiento de pies para defenderse",
-    "frequent_defensive_errors": ["errores defensivos repetitivos — ej: baja la mano derecha al lanzar jab"],
-    "vulnerable_angles": ["ángulos donde queda expuesto"],
-    "clinch_defense": "cómo defiende en el clinch",
-    "takedown_defense": "calidad y técnica de defensa al derribo"
-  }},
-
-  "movement_profile": {{
-    "stance": "guardia (orthodox/southpaw/switch)",
-    "footwork_style": "descripción del movimiento de pies",
-    "ring_generalship": "control del cuadrilátero/área",
-    "distance_management": "cómo maneja la distancia",
-    "lateral_movement": "movimiento lateral — frecuencia y dirección preferida"
+    "primary_defense": "sistema defensivo principal",
+    "head_movement": "descripción con timestamps",
+    "footwork_defense": "descripción con timestamps",
+    "frequent_defensive_errors": [
+      "Error — Round X min Y:ZZ, Round A min B:CC — conocido públicamente / nuevo descubrimiento"
+    ],
+    "vulnerable_angles": ["ángulo con timestamp"],
+    "clinch_defense": "descripción con timestamps",
+    "takedown_defense": "descripción con timestamps si aplica"
   }},
 
   "physical_attributes": {{
-    "cardio_assessment": "evaluación real del cardio observado en el video",
-    "power_level": "nivel de poder — KO power, knockdown, etc.",
-    "chin_durability": "resistencia observada a impactos",
-    "speed_assessment": "velocidad de manos y pies",
-    "strength_in_clinch": "fuerza en cuerpo a cuerpo"
+    "cardio_assessment": "evaluación con timestamps — compara con reputación pública",
+    "power_level": "con timestamps de momentos de poder",
+    "chin_durability": "con timestamps de impactos recibidos",
+    "speed_assessment": "con timestamps — compara con reputación",
+    "strength_in_clinch": "con timestamps"
   }},
 
   "mental_game": {{
-    "pressure_response": "cómo reacciona cuando está siendo dominado o lastimado",
-    "dominant_response": "cómo reacciona cuando está dominando — ¿presiona o se relaja?",
-    "adversity_handling": "respuesta a situaciones difíciles (knockdown, corte, cansancio)",
-    "corner_instruction_response": "¿aplica los ajustes de la esquina? ¿en qué round?",
-    "risk_taking": "perfil de toma de riesgos"
+    "pressure_response": "con timestamps — compara con lo conocido públicamente",
+    "dominant_response": "con timestamps",
+    "adversity_handling": "con timestamps",
+    "corner_instruction_response": "con timestamps de ajustes visibles",
+    "risk_taking": "con timestamps"
   }},
 
   "round_by_round_notes": {{
-    "early_rounds": "comportamiento en rounds 1-3",
-    "mid_rounds": "comportamiento en rounds intermedios",
-    "late_rounds": "comportamiento en rounds finales — ¿sube o baja el nivel?",
-    "rhythm_drops": ["momentos específicos donde baja el ritmo"]
+    "round_1": "análisis con momentos clave",
+    "round_2": "análisis",
+    "round_3": "análisis",
+    "round_4_plus": "rounds intermedios con timestamps",
+    "late_rounds": "rounds finales con timestamps — compara con reputación de cardio",
+    "rhythm_drops": ["bajón con timestamp y contexto"]
   }},
+
+  "key_moments": [
+    {{
+      "round": 3,
+      "timestamp": "1:45",
+      "type": "weakness",
+      "description": "descripción del momento",
+      "public_context": "esto es conocido públicamente / esto es un nuevo descubrimiento",
+      "importance": "alta/media/baja"
+    }}
+  ],
 
   "fight_result_analysis": {{
     "result": "ganó/perdió/empate",
-    "why_won_or_lost": "análisis profundo de por qué ganó o perdió ESTA pelea específica",
-    "turning_point": "momento clave que cambió la pelea",
-    "adjustments_made": "ajustes que hizo durante la pelea"
+    "why_won_or_lost": "análisis con timestamps y contexto público",
+    "turning_point": "Round X min Y:ZZ",
+    "adjustments_made": "con timestamps"
   }},
 
-  "strengths": ["lista de 5-8 fortalezas principales observadas"],
-  "weaknesses": ["lista de 5-8 debilidades/vulnerabilidades observadas"],
+  "strengths": [
+    "Fortaleza — Round X min Y — confirma reputación pública / nuevo descubrimiento"
+  ],
 
-  "key_observations": "observaciones adicionales importantes para el scouting"
+  "weaknesses": [
+    "Debilidad — Round X min Y — conocida públicamente / nueva en este video"
+  ],
+
+  "intelligence_summary": "resumen combinando lo del video con el contexto de internet — qué confirma, qué contradice, qué es nuevo"
 }}
 
-Responde SOLO con el JSON. Sin markdown, sin explicaciones.
+REGLA DE ORO: Cada observación debe tener Round + minuto Y contexto (confirma/contradice/nuevo).
+
+Responde SOLO con el JSON. Sin markdown.
 """.strip()
 
 
-# ── Prompt de síntesis de scouting (TODAS las peleas) ────────────────────────
-SCOUTING_SYNTHESIS_PROMPT = """
+# ── Prompt de síntesis de scouting enriquecido ───────────────────────────────
+
+ENRICHED_SCOUTING_SYNTHESIS_PROMPT = """
 Eres el jefe de scouting de un equipo de combate de élite.
 
-Recibes {num_fights} análisis individuales de peleas de {fighter_name} ({sport}).
-Tu tarea: sintetizar TODO en un REPORTE DE SCOUTING PROFESIONAL COMPLETO.
+Recibes {num_fights} análisis de peleas de {fighter_name} ({sport}).
+Cada análisis combina observaciones del video con contexto de internet.
 
-No resumas superficialmente. Profundiza. Sé brutalmente honesto.
+Tu tarea: sintetizar TODO en el reporte de scouting más completo y profesional posible.
+Cada patrón debe incluir:
+- Timestamps de referencia de múltiples peleas
+- Si está confirmado por múltiples fuentes (video + internet)
+- Si es un descubrimiento nuevo solo visible en video
 
 DATOS BIO: {bio_data}
 
 ANÁLISIS DE PELEAS:
 {analyses_text}
 
-Genera el reporte de scouting en formato JSON:
+Genera el reporte completo en JSON:
 
 {{
   "fighter_name": "{fighter_name}",
   "sport": "{sport}",
   "fights_reviewed": {num_fights},
 
-  "overall_style": "descripción completa del estilo — en 3-4 oraciones detalladas",
+  "intelligence_confidence": "alta/media/baja — qué tan confiable es el scouting basado en fuentes disponibles",
+
+  "overall_style": "descripción completa combinando video + fuentes públicas",
 
   "consistent_strengths": [
-    "fortaleza 1 con explicación detallada y ejemplos de peleas",
-    "fortaleza 2...",
-    "mínimo 6 fortalezas"
+    "Fortaleza — confirmada en video (timestamps) + fuentes públicas",
+    "mínimo 6 fortalezas con referencias"
   ],
 
   "consistent_weaknesses": [
-    "debilidad 1 con explicación y cómo explotarla",
-    "debilidad 2...",
+    "Debilidad — timestamps de todas las peleas + contexto público",
     "mínimo 6 debilidades"
   ],
 
   "signature_techniques": [
-    "técnica favorita 1 — setup, timing, combinaciones",
-    "técnica favorita 2...",
+    "Técnica con timestamps y contexto público",
     "mínimo 5 técnicas"
   ],
 
   "recurring_defensive_errors": [
-    "error defensivo 1 — cuándo ocurre, con qué frecuencia",
-    "error defensivo 2...",
+    "Error — timestamps múltiples peleas — conocido/nuevo descubrimiento",
     "mínimo 4 errores"
   ],
 
-  "strikes_received_most": [
-    "golpe que más recibe 1",
-    "golpe que más recibe 2"
+  "key_moments_across_fights": [
+    {{
+      "fight": "vs Rival",
+      "round": 3,
+      "timestamp": "1:45",
+      "type": "weakness",
+      "description": "descripción",
+      "source": "video / video+internet / internet"
+    }}
   ],
 
-  "movement_analysis": "análisis completo del movimiento — footwork, distancia, ring generalship",
-
-  "defense_system": "sistema defensivo completo — qué usa, qué le falta, vulnerabilidades",
-
-  "pressure_response": "cómo responde bajo presión real — análisis honesto",
-
-  "cardio_profile": "evaluación real del cardio basada en peleas — ¿baja en rounds tardíos? ¿cuándo?",
-
-  "late_round_behavior": "comportamiento específico en rounds tardíos — ¿sube, baja, igual?",
-
-  "rhythm_drop_patterns": [
-    "patrón de bajón 1 — cuándo y por qué",
-    "patrón de bajón 2..."
+  "confirmed_by_multiple_sources": [
+    "patrón confirmado tanto en video como en fuentes públicas"
   ],
 
-  "mental_profile": "perfil mental completo — reacción a adversidad, knockdowns, heridas, cansancio",
+  "new_discoveries_video_only": [
+    "patrón nuevo encontrado en video que no está reportado públicamente"
+  ],
 
-  "corner_adaptability": "¿aplica los ajustes de esquina? ¿qué tan bien?",
+  "contradictions_found": [
+    "algo que contradice su reputación pública — con evidencia del video"
+  ],
 
-  "strategy_evolution": "¿cambia la estrategia durante la pelea? ¿cómo?",
+  "cardio_profile": "evaluación con timestamps y comparación con reputación pública",
+  "late_round_behavior": "con timestamps",
+  "rhythm_drop_patterns": ["patrón con timestamps de múltiples peleas"],
+  "mental_profile": "con timestamps y contexto público",
+  "corner_adaptability": "con evidencia de video",
+  "strategy_evolution": "con evidencia de video",
+  "historical_losses_pattern": "con referencias de video e internet",
+  "historical_wins_pattern": "con referencias",
+  "matchup_history_vs_similar": "con timestamps y referencias",
+  "orthodox_vs_southpaw": "con timestamps",
 
-  "historical_losses_pattern": "patrón en las derrotas — ¿qué tipo de peleador lo derrota y por qué?",
-
-  "historical_wins_pattern": "patrón en las victorias — ¿cómo gana? ¿qué tipo de peleador derrota fácil?",
-
-  "matchup_history_vs_similar": "comportamiento vs peleadores con guardia/estilo similar al nuestro",
-
-  "orthodox_vs_southpaw": "comportamiento específico vs orthodox y vs southpaw",
-
-  "clinch_game": "juego de clinch completo — ofensivo y defensivo",
-
-  "ground_game": "juego en suelo si aplica al deporte",
-
-  "summary": "resumen ejecutivo del scouting — 5-6 oraciones que cualquier entrenador entendería inmediatamente"
+  "summary": "resumen ejecutivo combinando video + internet — 5-6 oraciones para el entrenador"
 }}
 
-Responde SOLO con el JSON. Sin markdown, sin explicaciones.
+Responde SOLO con el JSON. Sin markdown.
 """.strip()
 
 
 class GeminiEngine(BaseVideoEngine):
-    """Motor de análisis de video usando Gemini 2.0 Flash."""
+    """
+    Motor Gemini 2.0 Flash con análisis enriquecido.
+    Combina análisis de video con datos de internet.
+    """
 
     name = "gemini"
-    MODEL = "gemini-2.0-flash"   # ← modelo correcto y estable
+    MODEL = "gemini-2.0-flash"
 
     def __init__(self):
         if not settings.GEMINI_API_KEY:
             raise RuntimeError("GEMINI_API_KEY no configurada")
+        if not settings.ANTHROPIC_API_KEY:
+            raise RuntimeError("ANTHROPIC_API_KEY no configurada")
         genai.configure(api_key=settings.GEMINI_API_KEY)
         self._model = genai.GenerativeModel(self.MODEL)
+        self._claude = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
-    # ── Análisis de una pelea individual ─────────────────────────────────────
+    async def _research_fighter_online(
+        self,
+        fighter_name: str,
+        sport: str,
+    ) -> dict:
+        """
+        Claude busca en internet toda la información pública sobre el peleador.
+        """
+        prompt = WEB_RESEARCH_PROMPT.format(
+            fighter_name=fighter_name,
+            sport=sport,
+        )
+
+        try:
+            response = await asyncio.to_thread(
+                self._claude.messages.create,
+                model="claude-sonnet-4-20250514",
+                max_tokens=2048,
+                tools=[{"type": "web_search_20250305", "name": "web_search"}],
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            raw = ""
+            for block in response.content:
+                if hasattr(block, "text"):
+                    raw += block.text
+
+            raw = raw.strip()
+            raw = re.sub(r"^```json\s*", "", raw)
+            raw = re.sub(r"\s*```$", "", raw)
+            return json.loads(raw)
+
+        except Exception as e:
+            # Si falla la búsqueda web, continúa sin contexto de internet
+            return {
+                "fighter_name": fighter_name,
+                "public_style_description": "Sin datos de internet disponibles",
+                "note": f"Búsqueda web no disponible: {str(e)}"
+            }
 
     async def analyze_fight_video(
         self,
@@ -212,20 +339,27 @@ class GeminiEngine(BaseVideoEngine):
         sport: str,
         coach_notes: Optional[str] = None,
     ) -> FightAnalysisResult:
+        """
+        FASE 1: Claude busca info del peleador en internet.
+        FASE 2: Gemini analiza el video con ese contexto enriquecido.
+        """
+
+        # Fase 1: Buscar info en internet
+        web_context = await self._research_fighter_online(fighter_name, sport)
+
         coach_block = f"\nNOTAS DEL ENTRENADOR: {coach_notes}" if coach_notes else ""
 
-        prompt = FIGHT_ANALYSIS_PROMPT.format(
+        prompt = ENRICHED_FIGHT_ANALYSIS_PROMPT.format(
             fighter_name=fighter_name,
             sport=sport,
             coach_notes_block=coach_block,
+            web_context=json.dumps(web_context, ensure_ascii=False, indent=2),
         )
 
-        # Usar URL de YouTube directamente con Gemini
+        # Fase 2: Gemini analiza el video con contexto
         if video_source.startswith("http"):
             contents = [prompt, {"video_url": video_source}]
         else:
-            # Video local — subir con File API
-            import pathlib
             video_file = await asyncio.to_thread(
                 genai.upload_file, video_source
             )
@@ -241,8 +375,6 @@ class GeminiEngine(BaseVideoEngine):
         data = json.loads(raw)
         return FightAnalysisResult(**data)
 
-    # ── Síntesis de scouting (TODAS las peleas) ───────────────────────────────
-
     async def synthesize_fighter_profile(
         self,
         fighter_name: str,
@@ -250,12 +382,15 @@ class GeminiEngine(BaseVideoEngine):
         individual_analyses: list[FightAnalysisResult],
         bio_data: Optional[dict] = None,
     ) -> FighterStyleProfile:
+        """
+        Sintetiza el scouting completo combinando todos los análisis enriquecidos.
+        """
         analyses_text = "\n\n".join(
             f"=== PELEA {i+1} ===\n{json.dumps(a.model_dump(), ensure_ascii=False, indent=2)}"
             for i, a in enumerate(individual_analyses)
         )
 
-        prompt = SCOUTING_SYNTHESIS_PROMPT.format(
+        prompt = ENRICHED_SCOUTING_SYNTHESIS_PROMPT.format(
             fighter_name=fighter_name,
             sport=sport,
             num_fights=len(individual_analyses),
