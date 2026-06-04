@@ -1,6 +1,6 @@
 """
 Motor Gemini: análisis enriquecido con datos de internet + video.
-Modelo: gemini-2.0-flash
+Modelo: gemini-2.0-flash-lite
 
 FLUJO:
 1. Claude busca en internet todo lo que existe sobre el peleador
@@ -288,7 +288,7 @@ class GeminiEngine(BaseVideoEngine):
     """
 
     name = "gemini"
-    MODEL = "gemini-2.0-flash"
+    MODEL = "gemini-2.0-flash-lite"
 
     def __init__(self):
         if not settings.GEMINI_API_KEY:

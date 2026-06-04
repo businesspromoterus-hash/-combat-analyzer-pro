@@ -2,14 +2,16 @@
 API de autenticación: registro, login, logout.
 """
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, EmailStr
 
 from app.core.database import get_db
 from app.core.security import hash_password, verify_password, create_session_token
 from app.models import db_models as m
+from app.utils.email_sender import send_welcome_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -60,19 +62,37 @@ def get_current_user_optional(request: Request, db: Session = Depends(get_db)):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/register")
-def register(req: RegisterRequest, response: Response, db: Session = Depends(get_db)):
+def register(
+    req: RegisterRequest,
+    response: Response,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     """Registra un nuevo entrenador."""
-    existing = db.query(m.User).filter(m.User.email == req.email.lower()).first()
+    # Normalizar el email una sola vez (minúsculas + sin espacios) y usar ese
+    # mismo valor para verificar duplicados y para guardar. Antes la verificación
+    # usaba .lower() sin .strip() mientras que el guardado sí hacía .strip(), lo
+    # que permitía colar correos duplicados con espacios alrededor.
+    email = req.email.lower().strip()
+
+    existing = db.query(m.User).filter(m.User.email == email).first()
     if existing:
         raise HTTPException(400, "Ya existe una cuenta con ese email")
 
     user = m.User(
-        email=req.email.lower().strip(),
+        email=email,
         name=req.name.strip(),
         hashed_password=hash_password(req.password),
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Respaldo ante condiciones de carrera: la columna email es UNIQUE, así
+        # que si dos registros simultáneos usan el mismo correo, garantizamos que
+        # solo uno se cree y el otro reciba un error claro.
+        db.rollback()
+        raise HTTPException(400, "Ya existe una cuenta con ese email")
     db.refresh(user)
 
     # Crear sesión automáticamente
@@ -91,6 +111,11 @@ def register(req: RegisterRequest, response: Response, db: Session = Depends(get
         httponly=True,
         samesite="lax",
     )
+
+    # Correo de bienvenida — best-effort, en segundo plano para no bloquear la
+    # respuesta ni romper el registro si el envío falla.
+    background_tasks.add_task(send_welcome_email, user.email, user.name)
+
     return {"ok": True, "user": {"id": user.id, "name": user.name, "email": user.email}}
 
 

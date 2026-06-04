@@ -20,7 +20,7 @@
             <span x-text="oppFighter && oppFighter.name"></span>
           </h1>
           <div class="text-gray-300 mt-1 text-sm">
-            Motor: <span class="uppercase font-bold" x-text="plan && plan.engine_used"></span>
+            Motor: <span class="uppercase font-bold" x-text="plan && prettyEngine(plan.engine_used)"></span>
           </div>
         </div>
         <a :href="`/api/analysis/plan/${planId}/pdf`" target="_blank"
@@ -169,6 +169,12 @@ function planDetail(planId) {
     plan: null,
     ourFighter: null,
     oppFighter: null,
+    // El motor de video se presenta de forma genérica — sin exponer su nombre.
+    prettyEngine(name) {
+      const n = (name || '').toString().toLowerCase();
+      if (n === 'gemini') return 'IA';
+      return (name || '').toString().toUpperCase();
+    },
     async load() {
       this.plan = await fetch(`/api/analysis/plan/${this.planId}`).then(r => r.json());
       this.ourFighter = await fetch(`/api/fighters/${this.plan.our_fighter_id}`).then(r => r.json());

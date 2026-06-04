@@ -35,6 +35,15 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite:///./combat.db"
 
+    # Email (correo de bienvenida y transaccionales).
+    # Si no se configura SMTP, el envío se omite silenciosamente (no es fatal).
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""          # remitente; por defecto usa smtp_user
+    smtp_use_tls: bool = True    # True: STARTTLS (587); False: SSL directo (465)
+
     # Files
     upload_dir: str = "./uploads"
     reports_dir: str = "./reports"

@@ -35,8 +35,20 @@
           <input type="number" x-model.number="editForm.age" class="input" min="10" max="80">
         </div>
         <div>
-          <label class="label">Peso (kg)</label>
-          <input type="number" x-model.number="editForm.weight_kg" class="input" step="0.1">
+          <label class="label">Peso</label>
+          <div class="flex gap-1">
+            <input type="number" x-model.number="weightDisplay" @input="onWeightInput()"
+                   class="input" step="0.1" min="0"
+                   :placeholder="weightUnit === 'kg' ? 'kg' : 'lb'">
+            <div class="flex rounded-md border border-gray-300 overflow-hidden shrink-0">
+              <button type="button" @click="setWeightUnit('kg')"
+                      :class="weightUnit === 'kg' ? 'bg-navy-900 text-white' : 'bg-white text-gray-700'"
+                      class="px-2 text-sm font-semibold">kg</button>
+              <button type="button" @click="setWeightUnit('lb')"
+                      :class="weightUnit === 'lb' ? 'bg-navy-900 text-white' : 'bg-white text-gray-700'"
+                      class="px-2 text-sm font-semibold">lb</button>
+            </div>
+          </div>
         </div>
         <div>
           <label class="label">División</label>
@@ -247,7 +259,7 @@
               <div>
                 <div class="text-sm font-semibold">
                   Pelea #<span x-text="a.fight_id"></span> ·
-                  Motor: <span class="uppercase" x-text="a.engine_used"></span>
+                  Motor: <span class="uppercase" x-text="prettyEngine(a.engine_used)"></span>
                 </div>
                 <div class="text-xs"
                      :class="a.status === 'completed' ? 'text-green-600' : a.status === 'failed' ? 'text-red-600' : 'text-yellow-600'"
@@ -348,6 +360,35 @@ function fighterDetail(fighterId) {
     // es siempre el valor real que se guarda.
     editDivisionSelect: '',
     editDivisionCustom: false,
+    // Selector de unidad de peso en edición. editForm.weight_kg es siempre el
+    // valor canónico (kg); weightDisplay es lo que ve el entrenador en la
+    // unidad elegida (kg o lb).
+    weightUnit: 'kg',
+    weightDisplay: null,
+    onWeightInput() {
+      if (this.weightDisplay === null || this.weightDisplay === '' || isNaN(this.weightDisplay)) {
+        this.editForm.weight_kg = null;
+        return;
+      }
+      const kg = this.weightUnit === 'kg'
+        ? this.weightDisplay
+        : this.weightDisplay * 0.45359237;
+      this.editForm.weight_kg = Math.round(kg * 10) / 10;
+    },
+    setWeightUnit(unit) {
+      if (unit === this.weightUnit) return;
+      this.weightUnit = unit;
+      this.syncWeightDisplay();
+    },
+    syncWeightDisplay() {
+      const kg = this.editForm.weight_kg;
+      if (kg === null || kg === undefined || kg === '') {
+        this.weightDisplay = null;
+        return;
+      }
+      const val = this.weightUnit === 'kg' ? kg : kg / 0.45359237;
+      this.weightDisplay = Math.round(val * 10) / 10;
+    },
     BOXING_DIVISIONS: [
       'Minimumweight', 'Light Flyweight', 'Flyweight', 'Super Flyweight',
       'Bantamweight', 'Super Bantamweight', 'Featherweight', 'Super Featherweight',
@@ -395,6 +436,14 @@ function fighterDetail(fighterId) {
       }
     },
 
+    // Etiqueta del motor mostrada al usuario. El motor de análisis de video
+    // se presenta de forma genérica — no se expone su nombre interno.
+    prettyEngine(name) {
+      const n = (name || '').toString().toLowerCase();
+      if (n === 'gemini') return 'IA';
+      return (name || '').toString().toUpperCase();
+    },
+
     // ── Eliminar peleador ────────────────────────────────────────────────
     async deleteFighter() {
       const f = this.fighter || {};
@@ -423,6 +472,8 @@ function fighterDetail(fighterId) {
         notes: f.notes,
       };
       this.syncEditDivisionSelect();
+      this.weightUnit = 'kg';
+      this.syncWeightDisplay();
       this.editing = true;
     },
     cancelEdit() {

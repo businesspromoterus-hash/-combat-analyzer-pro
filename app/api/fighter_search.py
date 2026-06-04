@@ -165,6 +165,16 @@ Si no encuentras nada confiable:
         raw = re.sub(r"^```json\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
 
+        # Con la herramienta de web_search, el modelo suele anteponer texto,
+        # citas o explicaciones antes/después del JSON. Si parseamos el bloque
+        # completo, json.loads falla y devolvíamos "no encontrado" incluso para
+        # peleadores conocidos (Canelo, Robeisy, etc.). Extraemos el objeto JSON
+        # balanceado del texto antes de parsear.
+        if not raw.lstrip().startswith("{"):
+            match = re.search(r"\{.*\}", raw, re.DOTALL)
+            if match:
+                raw = match.group(0)
+
         data = json.loads(raw)
         return FighterSearchResponse(**data)
 
