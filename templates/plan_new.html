@@ -44,6 +44,42 @@
         </select>
       </div>
 
+      <!-- Predicción rápida del combate -->
+      <div class="border-t border-gray-200 pt-4">
+        <div class="flex items-center justify-between gap-2">
+          <label class="label mb-0">Predicción rápida del combate</label>
+          <button type="button" @click="predict()"
+                  :disabled="predicting || !form.our_fighter_id || !form.opponent_id"
+                  class="btn-secondary text-sm disabled:opacity-50">
+            <span x-show="!predicting">🔮 Predecir resultado</span>
+            <span x-show="predicting">Prediciendo...</span>
+          </button>
+        </div>
+        <p class="text-xs text-gray-500 mt-1">
+          Estima ganador probable, método y ronda. No requiere generar el plan completo.
+        </p>
+        <div x-show="predictError" x-cloak class="mt-2 text-sm text-red-600" x-text="predictError"></div>
+        <div x-show="prediction" x-cloak class="mt-3 bg-navy-900 text-white rounded-lg p-4">
+          <div class="text-gold-500 text-xs font-bold tracking-wider mb-1">GANADOR PROBABLE</div>
+          <div class="text-2xl font-extrabold" x-text="prediction && prediction.winner"></div>
+          <div class="grid grid-cols-3 gap-3 mt-3 text-sm">
+            <div><div class="text-gray-300 text-xs">Confianza</div>
+              <div class="font-bold" x-text="prediction && (prediction.confidence_percentage != null ? prediction.confidence_percentage + '%' : '—')"></div></div>
+            <div><div class="text-gray-300 text-xs">Método</div>
+              <div class="font-bold" x-text="prediction && (prediction.method || '—')"></div></div>
+            <div><div class="text-gray-300 text-xs">Ronda estimada</div>
+              <div class="font-bold" x-text="prediction && (prediction.estimated_round || '—')"></div></div>
+          </div>
+          <p class="mt-3 text-sm text-gray-200" x-show="prediction && prediction.reasoning"
+             x-text="prediction && prediction.reasoning"></p>
+          <ul class="list-disc list-inside mt-2 text-sm text-gray-200">
+            <template x-for="kf in (prediction && prediction.key_factors) || []" :key="kf">
+              <li x-text="kf"></li>
+            </template>
+          </ul>
+        </div>
+      </div>
+
       <div>
         <label class="label">Contexto adicional (opcional)</label>
         <textarea x-model="form.additional_context" class="input" rows="4"
@@ -76,6 +112,9 @@ function planForm() {
     form: { our_fighter_id: null, opponent_id: null, engine: '', additional_context: '' },
     loading: false,
     error: '',
+    predicting: false,
+    prediction: null,
+    predictError: '',
     async load() {
       const [our, opp] = await Promise.all([
         fetch('/api/fighters?role=our').then(r => r.json()),
@@ -83,6 +122,30 @@ function planForm() {
       ]);
       this.ourFighters = our;
       this.opponents = opp;
+    },
+    async predict() {
+      if (!this.form.our_fighter_id || !this.form.opponent_id) return;
+      this.predicting = true;
+      this.prediction = null;
+      this.predictError = '';
+      try {
+        const payload = {
+          our_fighter_id: this.form.our_fighter_id,
+          opponent_id: this.form.opponent_id,
+        };
+        if (this.form.engine) payload.engine = this.form.engine;
+        const res = await fetch('/api/analysis/prediction', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        this.prediction = await res.json();
+      } catch (e) {
+        this.predictError = e.message;
+      } finally {
+        this.predicting = false;
+      }
     },
     async submit() {
       this.error = '';

@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: str = "development"
     secret_key: str = "change-me"
+    # Secreto de sesión (variable de entorno SESSION_SECRET en Railway).
+    # Usado como secreto canónico para la firma/seguridad de sesiones.
+    session_secret: str = ""
 
     # AI Engines
     gemini_api_key: str = ""
@@ -40,6 +43,29 @@ class Settings(BaseSettings):
     # Limits
     max_fights_per_fighter: int = 10
     analysis_timeout_seconds: int = 600
+
+    # ── Aliases en MAYÚSCULAS ─────────────────────────────────────────────
+    # Gran parte del código (engines, chat, fighter_search) accede a las
+    # claves como settings.ANTHROPIC_API_KEY / GEMINI_API_KEY / OPENAI_API_KEY.
+    # Los campos de pydantic-settings son en minúscula, por lo que ese acceso
+    # lanzaba AttributeError y rompía autofill, análisis y chat. Exponemos
+    # alias en mayúsculas que devuelven el mismo valor.
+    @property
+    def ANTHROPIC_API_KEY(self) -> str:
+        return self.anthropic_api_key
+
+    @property
+    def GEMINI_API_KEY(self) -> str:
+        return self.gemini_api_key
+
+    @property
+    def OPENAI_API_KEY(self) -> str:
+        return self.openai_api_key
+
+    @property
+    def SESSION_SECRET(self) -> str:
+        """Secreto de sesión efectivo (SESSION_SECRET, o secret_key como respaldo)."""
+        return self.session_secret or self.secret_key
 
     @property
     def upload_path(self) -> Path:

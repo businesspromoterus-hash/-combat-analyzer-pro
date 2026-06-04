@@ -27,6 +27,8 @@ class FighterBase(BaseModel):
     sub_wins: int = 0
     ippon_wins: int = 0
     years_experience: Optional[int] = None
+    years_experience_pro: Optional[int] = Field(None, ge=0, le=70)
+    years_experience_amateur: Optional[int] = Field(None, ge=0, le=70)
     notes: Optional[str] = None
 
 
@@ -36,14 +38,22 @@ class FighterCreate(FighterBase):
 
 class FighterUpdate(BaseModel):
     name: Optional[str] = None
+    country: Optional[str] = None
     age: Optional[int] = None
     weight_kg: Optional[float] = None
+    division: Optional[str] = None
     height_cm: Optional[float] = None
     reach_cm: Optional[float] = None
     stance: Optional[Stance] = None
     wins: Optional[int] = None
     losses: Optional[int] = None
     draws: Optional[int] = None
+    ko_wins: Optional[int] = None
+    sub_wins: Optional[int] = None
+    ippon_wins: Optional[int] = None
+    years_experience: Optional[int] = None
+    years_experience_pro: Optional[int] = None
+    years_experience_amateur: Optional[int] = None
     notes: Optional[str] = None
 
 
@@ -136,6 +146,25 @@ class ScoutingReportOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ========== FIGHT PREDICTION ==========
+
+class FightPredictionRequest(BaseModel):
+    our_fighter_id: int
+    opponent_id: int
+    engine: Optional[str] = None
+
+
+class FightPredictionOut(BaseModel):
+    our_fighter: str
+    opponent: str
+    winner: Optional[str] = None
+    confidence_percentage: Optional[int] = None
+    method: Optional[str] = None
+    estimated_round: Optional[str] = None
+    reasoning: Optional[str] = None
+    key_factors: List[str] = []
 
 
 # ========== FIGHT PLAN ==========

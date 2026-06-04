@@ -208,6 +208,47 @@ async def synthesize_fighter_profile(
     return profile
 
 
+# ========== PREDICCIÓN DE PELEA ==========
+
+async def predict_fight(
+    db: Session,
+    our_fighter_id: int,
+    opponent_id: int,
+    engine_name: Optional[str] = None,
+) -> dict:
+    """
+    Predice ganador probable, método y ronda estimada cruzando ambos peleadores.
+    Usa el scouting existente como contexto si está disponible.
+    """
+    our_fighter = fighter_service.get_fighter(db, our_fighter_id)
+    opponent = fighter_service.get_fighter(db, opponent_id)
+    if not our_fighter or not opponent:
+        raise ValueError("Uno de los peleadores no existe")
+
+    def latest_scouting(fid: int):
+        rep = (
+            db.query(m.ScoutingReport)
+            .filter(m.ScoutingReport.fighter_id == fid)
+            .order_by(m.ScoutingReport.created_at.desc())
+            .first()
+        )
+        return rep.report if rep else None
+
+    engine = get_strategy_engine(engine_name or "claude")
+
+    prediction = await engine.predict_fight(
+        our_bio=fighter_service.fighter_to_bio_dict(our_fighter),
+        opponent_bio=fighter_service.fighter_to_bio_dict(opponent),
+        sport=our_fighter.sport.value,
+        our_context=latest_scouting(our_fighter_id),
+        opponent_context=latest_scouting(opponent_id),
+    )
+
+    prediction["our_fighter"] = our_fighter.name
+    prediction["opponent"] = opponent.name
+    return prediction
+
+
 # ========== FASE 2: PLAN ESTRATÉGICO (CLAUDE) ==========
 
 async def generate_fight_plan_from_scouting(

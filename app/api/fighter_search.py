@@ -13,6 +13,8 @@ import re
 
 from app.core.database import get_db
 from app.core.config import settings
+from app.api.auth import get_current_user
+from app.models import db_models as m
 
 router = APIRouter(prefix="/api/fighters/search", tags=["fighter-search"])
 
@@ -35,6 +37,8 @@ class FighterSearchResult(BaseModel):
     ko_wins: Optional[int] = None
     sub_wins: Optional[int] = None
     years_experience: Optional[int] = None
+    years_experience_pro: Optional[int] = None
+    years_experience_amateur: Optional[int] = None
     style_summary: Optional[str] = None
     known_strengths: Optional[List[str]] = None
     known_weaknesses: Optional[List[str]] = None
@@ -59,7 +63,10 @@ class FighterSearchResponse(BaseModel):
 # ── Endpoint de búsqueda ──────────────────────────────────────────────────────
 
 @router.post("/", response_model=FighterSearchResponse)
-async def search_fighter(req: FighterSearchRequest):
+async def search_fighter(
+    req: FighterSearchRequest,
+    user: m.User = Depends(get_current_user),
+):
     """
     Busca datos de un peleador por nombre.
     Usa Claude con web search para encontrar información pública.
@@ -77,6 +84,15 @@ Busca información sobre el peleador: "{req.name}"
 
 Busca en internet datos reales y actuales sobre este peleador de combate.
 Puede ser boxeador, peleador de MMA, kickboxer, judoka, etc.
+
+CÓMO BUSCAR (importante para encontrar también a peleadores menos mediáticos):
+- Consulta BoxRec, Tapology, Sherdog, Wikipedia, ESPN y federaciones olímpicas/amateur.
+- Considera variantes del nombre: con y sin acentos/tildes, orden de apellidos,
+  diminutivos y la grafía en inglés (ej: "Robeisy Ramírez" = "Robeisy Ramirez",
+  medallista olímpico cubano de boxeo, también buscado como "Robeisy Carrillo").
+- Incluye a peleadores con trayectoria amateur/olímpica relevante aunque su
+  carrera profesional sea corta o reciente.
+- Si hay coincidencia razonable, devuélvela aunque la confianza sea media.
 
 Si encuentras al peleador, devuelve sus datos.
 Si hay varios peleadores con nombre similar, devuelve hasta 3 opciones para que el entrenador elija.
@@ -105,6 +121,8 @@ Responde SOLO con este JSON, sin markdown:
       "ko_wins": null,
       "sub_wins": null,
       "years_experience": null,
+      "years_experience_pro": null,
+      "years_experience_amateur": null,
       "style_summary": "descripción del estilo de pelea en 2-3 oraciones",
       "known_strengths": ["fortaleza 1", "fortaleza 2"],
       "known_weaknesses": ["debilidad 1 si es conocida públicamente"],
@@ -132,7 +150,7 @@ Si no encuentras nada confiable:
     try:
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=2048,
+            max_tokens=4096,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{"role": "user", "content": prompt}],
         )

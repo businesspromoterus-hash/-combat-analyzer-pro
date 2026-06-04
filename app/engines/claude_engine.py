@@ -207,6 +207,33 @@ Responde SOLO con el JSON. Sin markdown.
 """.strip()
 
 
+FIGHT_PREDICTION_PROMPT = """
+Eres un analista experto de deportes de combate. Predice el resultado más probable
+de la pelea entre estos dos peleadores, combinando los datos internos con lo que
+encuentres en internet sobre su forma reciente.
+
+DEPORTE: {sport}
+
+PELEADOR A (NUESTRO):
+{our_bio}
+{our_context}
+
+PELEADOR B (RIVAL):
+{opp_bio}
+{opp_context}
+
+Devuelve SOLO este JSON (sin markdown):
+{{
+  "winner": "nombre del peleador que probablemente gana",
+  "confidence_percentage": 65,
+  "method": "KO/TKO, Sumisión, Decisión unánime, Decisión dividida o Puntos",
+  "estimated_round": "ronda estimada del desenlace (ej: 'Round 7') o 'Decisión (a la distancia)'",
+  "reasoning": "explicación clara en 3-5 oraciones basada en estilos, récord y forma",
+  "key_factors": ["factor decisivo 1", "factor 2", "factor 3"]
+}}
+""".strip()
+
+
 class ClaudeEngine(BaseStrategyEngine):
     """Motor estratégico Claude con recomendaciones de sparring reales."""
 
@@ -251,6 +278,42 @@ Responde en JSON con la estructura de FighterStyleProfile. Solo JSON.
         raw = re.sub(r"\s*```$", "", raw)
         data = json.loads(raw)
         return FighterStyleProfile(**data)
+
+    async def predict_fight(
+        self,
+        our_bio: dict,
+        opponent_bio: dict,
+        sport: str,
+        our_context: Optional[dict] = None,
+        opponent_context: Optional[dict] = None,
+    ) -> dict:
+        def _ctx(label, data):
+            return f"\n{label}:\n{json.dumps(data, ensure_ascii=False, indent=2)}" if data else ""
+
+        prompt = FIGHT_PREDICTION_PROMPT.format(
+            sport=sport,
+            our_bio=json.dumps(our_bio, ensure_ascii=False, indent=2),
+            opp_bio=json.dumps(opponent_bio, ensure_ascii=False, indent=2),
+            our_context=_ctx("SCOUTING NUESTRO", our_context),
+            opp_context=_ctx("SCOUTING RIVAL", opponent_context),
+        )
+
+        response = await asyncio.to_thread(
+            self._client.messages.create,
+            model=self.MODEL,
+            max_tokens=1500,
+            tools=[{"type": "web_search_20250305", "name": "web_search"}],
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        raw = ""
+        for block in response.content:
+            if hasattr(block, "text"):
+                raw += block.text
+        raw = raw.strip()
+        raw = re.sub(r"^```json\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+        return json.loads(raw)
 
     async def generate_fight_plan(
         self,

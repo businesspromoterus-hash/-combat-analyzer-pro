@@ -6,27 +6,42 @@ from app.models import db_models as m
 from app.models import schemas as s
 
 
-def create_fighter(db: Session, data: s.FighterCreate) -> m.Fighter:
-    fighter = m.Fighter(**data.model_dump())
+def create_fighter(
+    db: Session, data: s.FighterCreate, owner_id: Optional[int] = None
+) -> m.Fighter:
+    fighter = m.Fighter(**data.model_dump(), owner_id=owner_id)
     db.add(fighter)
     db.commit()
     db.refresh(fighter)
     return fighter
 
 
-def get_fighter(db: Session, fighter_id: int) -> Optional[m.Fighter]:
-    return db.query(m.Fighter).filter(m.Fighter.id == fighter_id).first()
+def get_fighter(
+    db: Session, fighter_id: int, owner_id: Optional[int] = None
+) -> Optional[m.Fighter]:
+    q = db.query(m.Fighter).filter(m.Fighter.id == fighter_id)
+    if owner_id is not None:
+        q = q.filter(m.Fighter.owner_id == owner_id)
+    return q.first()
 
 
-def list_fighters(db: Session, role: Optional[m.FighterRole] = None) -> list[m.Fighter]:
+def list_fighters(
+    db: Session,
+    role: Optional[m.FighterRole] = None,
+    owner_id: Optional[int] = None,
+) -> list[m.Fighter]:
     q = db.query(m.Fighter)
+    if owner_id is not None:
+        q = q.filter(m.Fighter.owner_id == owner_id)
     if role:
         q = q.filter(m.Fighter.role == role)
     return q.order_by(m.Fighter.created_at.desc()).all()
 
 
-def update_fighter(db: Session, fighter_id: int, data: s.FighterUpdate) -> Optional[m.Fighter]:
-    fighter = get_fighter(db, fighter_id)
+def update_fighter(
+    db: Session, fighter_id: int, data: s.FighterUpdate, owner_id: Optional[int] = None
+) -> Optional[m.Fighter]:
+    fighter = get_fighter(db, fighter_id, owner_id=owner_id)
     if not fighter:
         return None
     for k, v in data.model_dump(exclude_unset=True).items():
@@ -36,8 +51,10 @@ def update_fighter(db: Session, fighter_id: int, data: s.FighterUpdate) -> Optio
     return fighter
 
 
-def delete_fighter(db: Session, fighter_id: int) -> bool:
-    fighter = get_fighter(db, fighter_id)
+def delete_fighter(
+    db: Session, fighter_id: int, owner_id: Optional[int] = None
+) -> bool:
+    fighter = get_fighter(db, fighter_id, owner_id=owner_id)
     if not fighter:
         return False
     db.delete(fighter)
@@ -62,5 +79,7 @@ def fighter_to_bio_dict(fighter: m.Fighter) -> dict:
         "sub_wins": fighter.sub_wins,
         "ippon_wins": fighter.ippon_wins,
         "years_experience": fighter.years_experience,
+        "years_experience_pro": fighter.years_experience_pro,
+        "years_experience_amateur": fighter.years_experience_amateur,
         "notes": fighter.notes,
     }

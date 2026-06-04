@@ -88,6 +88,18 @@ def get_fight(db: Session, fight_id: int) -> Optional[m.Fight]:
     return db.query(m.Fight).filter(m.Fight.id == fight_id).first()
 
 
+def get_owned_fight(
+    db: Session, fight_id: int, owner_id: Optional[int] = None
+) -> Optional[m.Fight]:
+    """Devuelve la pelea solo si pertenece a un peleador del owner indicado."""
+    fight = get_fight(db, fight_id)
+    if not fight:
+        return None
+    if owner_id is not None and (fight.fighter is None or fight.fighter.owner_id != owner_id):
+        return None
+    return fight
+
+
 def list_fights_for_fighter(db: Session, fighter_id: int) -> list[m.Fight]:
     return (
         db.query(m.Fight)

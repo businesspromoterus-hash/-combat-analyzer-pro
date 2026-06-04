@@ -13,6 +13,7 @@ import json
 
 from app.core.database import get_db
 from app.core.config import settings
+from app.api.auth import get_current_user
 from app.models import db_models as m
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -34,6 +35,7 @@ def build_system_prompt(
     context_type: str,
     db: Session,
     context_id: Optional[int],
+    owner_id: Optional[int] = None,
 ) -> str:
     base = """Eres el asistente táctico de FightIQ.
 Eres un experto en deportes de combate: boxeo, MMA, kickboxing, muay thai, judo, BJJ, karate, karate combat, BKFC, taekwondo y lucha.
@@ -52,7 +54,10 @@ Cuando respondas, indica de dónde viene cada dato:
 Si el entrenador pregunta en español, responde en español. Si pregunta en inglés, responde en inglés."""
 
     if context_type == "fighter" and context_id:
-        fighter = db.query(m.Fighter).filter(m.Fighter.id == context_id).first()
+        fq = db.query(m.Fighter).filter(m.Fighter.id == context_id)
+        if owner_id is not None:
+            fq = fq.filter(m.Fighter.owner_id == owner_id)
+        fighter = fq.first()
         if not fighter:
             return base
 
@@ -100,6 +105,8 @@ CONTEXTO INTERNO DE FIGHTIQ — {fighter.name}:
         fighter = db.query(m.Fighter).filter(
             m.Fighter.id == scouting.fighter_id
         ).first()
+        if owner_id is not None and (not fighter or fighter.owner_id != owner_id):
+            return base
 
         ctx = f"""
 CONTEXTO INTERNO — SCOUTING DE {fighter.name if fighter else 'peleador'}:
@@ -113,6 +120,8 @@ CONTEXTO INTERNO — SCOUTING DE {fighter.name if fighter else 'peleador'}:
             return base
 
         our = db.query(m.Fighter).filter(m.Fighter.id == plan.our_fighter_id).first()
+        if owner_id is not None and (not our or our.owner_id != owner_id):
+            return base
         opp = db.query(m.Fighter).filter(m.Fighter.id == plan.opponent_id).first()
 
         our_scouting = db.query(m.ScoutingReport).filter(
@@ -143,7 +152,11 @@ PLAN COMPLETO:
 
 
 @router.post("/")
-async def chat(req: ChatRequest, db: Session = Depends(get_db)):
+async def chat(
+    req: ChatRequest,
+    db: Session = Depends(get_db),
+    user: m.User = Depends(get_current_user),
+):
     if not settings.ANTHROPIC_API_KEY:
         raise HTTPException(500, "ANTHROPIC_API_KEY no configurada")
 
@@ -151,6 +164,7 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)):
         context_type=req.context_type,
         db=db,
         context_id=req.context_id,
+        owner_id=user.id,
     )
 
     messages = []

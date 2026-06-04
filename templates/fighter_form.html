@@ -2,7 +2,7 @@
 {% block title %}Nuevo peleador - Combat Analyzer Pro{% endblock %}
 
 {% block content %}
-<div x-data="fighterForm()" x-init="init()">
+<div x-data="fighterForm()" x-init="init()" @fighter-autofill="applyAutofill($event.detail)">
   <div class="mb-6 flex items-center gap-3">
     <a href="/" class="text-navy-700 hover:underline">← Inicio</a>
   </div>
@@ -39,7 +39,7 @@
         </div>
         <div>
           <label class="label">Disciplina *</label>
-          <select x-model="form.sport" required class="input">
+          <select x-model="form.sport" required class="input" @change="syncDivisionSelect()">
             <option value="boxing">Boxeo</option>
             <option value="mma">MMA</option>
             <option value="bkfc">BKFC — Bare Knuckle</option>
@@ -62,8 +62,20 @@
           <input type="number" x-model.number="form.age" class="input" min="10" max="80">
         </div>
         <div>
-          <label class="label">Peso (kg)</label>
-          <input type="number" x-model.number="form.weight_kg" class="input" step="0.1">
+          <label class="label">Peso</label>
+          <div class="flex gap-1">
+            <input type="number" x-model.number="weightDisplay" @input="onWeightInput()"
+                   class="input" step="0.1" min="0"
+                   :placeholder="weightUnit === 'kg' ? 'kg' : 'lb'">
+            <div class="flex rounded-md border border-gray-300 overflow-hidden shrink-0">
+              <button type="button" @click="setWeightUnit('kg')"
+                      :class="weightUnit === 'kg' ? 'bg-navy-900 text-white' : 'bg-white text-gray-700'"
+                      class="px-2 text-sm font-semibold">kg</button>
+              <button type="button" @click="setWeightUnit('lb')"
+                      :class="weightUnit === 'lb' ? 'bg-navy-900 text-white' : 'bg-white text-gray-700'"
+                      class="px-2 text-sm font-semibold">lb</button>
+            </div>
+          </div>
         </div>
         <div>
           <label class="label">Estatura (cm)</label>
@@ -78,7 +90,18 @@
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label class="label">División</label>
-          <input x-model="form.division" class="input" placeholder="Ej. Welter, -73kg, Lightweight">
+          <select x-show="divisionOptions.length" x-model="divisionSelect"
+                  @change="onDivisionSelect()" class="input">
+            <option value="">Selecciona división...</option>
+            <template x-for="d in divisionOptions" :key="d">
+              <option :value="d" x-text="d"></option>
+            </template>
+            <option value="__custom__">— Otra / personalizada —</option>
+          </select>
+          <input x-show="!divisionOptions.length || divisionCustom"
+                 x-model="form.division" class="input"
+                 :class="(divisionOptions.length && divisionCustom) ? 'mt-2' : ''"
+                 placeholder="Ej. -73 kg, Catchweight, Openweight">
         </div>
         <div>
           <label class="label">Guardia</label>
@@ -126,9 +149,15 @@
         </div>
       </div>
 
-      <div>
-        <label class="label">Años de experiencia</label>
-        <input type="number" x-model.number="form.years_experience" class="input" min="0">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="label">Experiencia profesional (años)</label>
+          <input type="number" x-model.number="form.years_experience_pro" class="input" min="0" max="70">
+        </div>
+        <div>
+          <label class="label">Experiencia amateur (años)</label>
+          <input type="number" x-model.number="form.years_experience_amateur" class="input" min="0" max="70">
+        </div>
       </div>
 
       <div>
@@ -158,6 +187,29 @@ function fighterForm() {
   return {
     loading: false,
     error: '',
+    // Selector de unidad de peso. form.weight_kg es siempre el valor canónico (kg);
+    // weightDisplay es lo que ve el entrenador en la unidad elegida.
+    weightUnit: 'kg',
+    weightDisplay: null,
+    // Selector de división. divisionSelect controla el <select>; si el
+    // entrenador elige "Otra" (o el deporte no tiene divisiones estándar),
+    // divisionCustom revela un campo de texto libre. form.division es el valor real.
+    divisionSelect: '',
+    divisionCustom: false,
+    BOXING_DIVISIONS: [
+      'Minimumweight', 'Light Flyweight', 'Flyweight', 'Super Flyweight',
+      'Bantamweight', 'Super Bantamweight', 'Featherweight', 'Super Featherweight',
+      'Lightweight', 'Super Lightweight', 'Welterweight', 'Super Welterweight',
+      'Middleweight', 'Super Middleweight', 'Light Heavyweight', 'Cruiserweight',
+      'Heavyweight',
+    ],
+    MMA_DIVISIONS: [
+      'Flyweight (125 lb)', 'Bantamweight (135 lb)', 'Featherweight (145 lb)',
+      'Lightweight (155 lb)', 'Welterweight (170 lb)', 'Middleweight (185 lb)',
+      'Light Heavyweight (205 lb)', 'Heavyweight (265 lb)',
+      "Women's Strawweight (115 lb)", "Women's Flyweight (125 lb)",
+      "Women's Bantamweight (135 lb)", "Women's Featherweight (145 lb)",
+    ],
     form: {
       role: 'our',
       name: '',
@@ -172,11 +224,98 @@ function fighterForm() {
       wins: 0, losses: 0, draws: 0,
       ko_wins: 0, sub_wins: 0, ippon_wins: 0,
       years_experience: null,
+      years_experience_pro: null,
+      years_experience_amateur: null,
       notes: '',
     },
     init() {
       const params = new URLSearchParams(window.location.search);
       if (params.get('role') === 'opponent') this.form.role = 'opponent';
+    },
+    // ── Conversión de peso kg/lb ─────────────────────────────────────────
+    onWeightInput() {
+      if (this.weightDisplay === null || this.weightDisplay === '' || isNaN(this.weightDisplay)) {
+        this.form.weight_kg = null;
+        return;
+      }
+      const kg = this.weightUnit === 'kg'
+        ? this.weightDisplay
+        : this.weightDisplay * 0.45359237;
+      this.form.weight_kg = Math.round(kg * 10) / 10;
+    },
+    // ── Selector de división ─────────────────────────────────────────────
+    get divisionOptions() {
+      const s = this.form.sport;
+      if (s === 'boxing' || s === 'bkfc') return this.BOXING_DIVISIONS;
+      if (s === 'mma') return this.MMA_DIVISIONS;
+      return [];
+    },
+    onDivisionSelect() {
+      if (this.divisionSelect === '__custom__') {
+        this.divisionCustom = true;
+        this.form.division = '';
+      } else {
+        this.divisionCustom = false;
+        this.form.division = this.divisionSelect;
+      }
+    },
+    syncDivisionSelect() {
+      const opts = this.divisionOptions;
+      if (!opts.length) {
+        this.divisionCustom = false;
+        this.divisionSelect = '';
+      } else if (this.form.division && opts.includes(this.form.division)) {
+        this.divisionSelect = this.form.division;
+        this.divisionCustom = false;
+      } else if (this.form.division) {
+        this.divisionSelect = '__custom__';
+        this.divisionCustom = true;
+      } else {
+        this.divisionSelect = '';
+        this.divisionCustom = false;
+      }
+    },
+    setWeightUnit(unit) {
+      if (unit === this.weightUnit) return;
+      this.weightUnit = unit;
+      this.syncWeightDisplay();
+    },
+    syncWeightDisplay() {
+      if (this.form.weight_kg === null || this.form.weight_kg === undefined || this.form.weight_kg === '') {
+        this.weightDisplay = null;
+        return;
+      }
+      const val = this.weightUnit === 'kg'
+        ? this.form.weight_kg
+        : this.form.weight_kg / 0.45359237;
+      this.weightDisplay = Math.round(val * 10) / 10;
+    },
+    // Aplica los datos encontrados por el buscador automático al formulario.
+    // El entrenador puede editar cualquier campo antes de guardar.
+    applyAutofill(r) {
+      if (!r) return;
+      const copy = (k) => {
+        if (r[k] !== null && r[k] !== undefined && r[k] !== '') this.form[k] = r[k];
+      };
+      ['name', 'country', 'age', 'weight_kg', 'division',
+       'height_cm', 'reach_cm', 'years_experience',
+       'years_experience_pro', 'years_experience_amateur'].forEach(copy);
+      // Récord del peleador (victorias/derrotas/empates/KOs/sumisiones)
+      ['wins', 'losses', 'draws', 'ko_wins', 'sub_wins'].forEach(copy);
+      if (r.sport) this.form.sport = r.sport;
+      if (r.stance) this.form.stance = r.stance;
+      this.syncWeightDisplay();
+      this.syncDivisionSelect();
+
+      // Construir notas con la inteligencia táctica encontrada
+      let notes = '';
+      if (r.style_summary) notes += `Estilo: ${r.style_summary}\n\n`;
+      if (r.known_strengths?.length) notes += `Fortalezas conocidas:\n${r.known_strengths.map(s => `• ${s}`).join('\n')}\n\n`;
+      if (r.known_weaknesses?.length) notes += `Debilidades conocidas:\n${r.known_weaknesses.map(w => `• ${w}`).join('\n')}\n\n`;
+      if (r.current_trainer) notes += `Entrenador: ${r.current_trainer}\n`;
+      if (r.gym) notes += `Gimnasio: ${r.gym}\n`;
+      if (r.source_notes) notes += `\nFuente: ${r.source_notes}`;
+      if (notes) this.form.notes = notes.trim();
     },
     async submit() {
       this.error = '';

@@ -167,3 +167,72 @@ class AIEngine(ABC):
     ) -> CompleteFightPlan:
         """Genera plan estratégico completo cruzando ambos perfiles."""
         raise NotImplementedError
+
+    # Predicción de pelea. No es abstracto para no obligar a todos los motores;
+    # los motores de estrategia (Claude) lo sobreescriben.
+    async def predict_fight(
+        self,
+        our_bio: dict,
+        opponent_bio: dict,
+        sport: str,
+        our_context: Optional[dict] = None,
+        opponent_context: Optional[dict] = None,
+    ) -> dict:
+        """Predice ganador probable, método y ronda estimada."""
+        raise NotImplementedError(
+            f"{self.name} no soporta predicción de pelea; usa Claude."
+        )
+
+
+# ========== BASES ESPECIALIZADAS ==========
+# Los motores concretos heredan de estas bases según su especialidad:
+#   GeminiEngine -> BaseVideoEngine ; ClaudeEngine -> BaseStrategyEngine.
+# Antes no existían y provocaban al importar los motores:
+#   ImportError: cannot import name 'BaseVideoEngine' from 'app.engines.base'
+
+class BaseVideoEngine(AIEngine):
+    """
+    Base para motores con análisis de video nativo (p. ej. Gemini).
+
+    Implementa por defecto generate_fight_plan (que estos motores no usan)
+    para que la subclase deje de ser abstracta y pueda instanciarse.
+    """
+    supports_video = True
+    supports_strategy = True
+
+    async def generate_fight_plan(
+        self,
+        our_profile: FighterStyleProfile,
+        our_bio: dict,
+        opponent_profile: FighterStyleProfile,
+        opponent_bio: dict,
+        sport: str,
+        additional_context: Optional[str] = None,
+    ) -> CompleteFightPlan:
+        raise NotImplementedError(
+            f"{self.name} es un motor de video; usa un motor de estrategia "
+            "(p. ej. Claude) para generar planes."
+        )
+
+
+class BaseStrategyEngine(AIEngine):
+    """
+    Base para motores centrados en razonamiento estratégico (p. ej. Claude).
+
+    Implementa por defecto analyze_fight_video (que estos motores no usan)
+    para que la subclase deje de ser abstracta y pueda instanciarse.
+    """
+    supports_video = False
+    supports_strategy = True
+
+    async def analyze_fight_video(
+        self,
+        video_source: str,
+        fighter_name: str,
+        sport: str,
+        coach_notes: Optional[str] = None,
+    ) -> FightAnalysisResult:
+        raise NotImplementedError(
+            f"{self.name} no procesa video; usa un motor de video "
+            "(p. ej. Gemini) para analizar peleas."
+        )

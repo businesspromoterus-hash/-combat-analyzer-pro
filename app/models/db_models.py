@@ -110,7 +110,9 @@ class Fighter(Base):
     ko_wins = Column(Integer, default=0)
     sub_wins = Column(Integer, default=0)
     ippon_wins = Column(Integer, default=0)
-    years_experience = Column(Integer, nullable=True)
+    years_experience = Column(Integer, nullable=True)  # legado — total (se mantiene por compatibilidad)
+    years_experience_pro = Column(Integer, nullable=True)       # experiencia profesional
+    years_experience_amateur = Column(Integer, nullable=True)   # experiencia amateur
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

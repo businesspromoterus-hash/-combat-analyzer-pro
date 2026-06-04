@@ -191,69 +191,12 @@ function fighterSearch() {
       const r = this.results[this.selectedIndex];
       this.confirmedName = r.name;
 
-      // Llenar el formulario con los datos encontrados
-      this.fillForm(r);
+      // El formulario usa Alpine (x-model) sin atributos name/id, así que
+      // manipular el DOM directamente no funcionaba. En su lugar despachamos
+      // un evento con los datos y el formulario los aplica a su estado Alpine.
+      this.$dispatch('fighter-autofill', r);
       this.confirmed = true;
       this.results = [];
-    },
-
-    fillForm(r) {
-      // Llenar cada campo del formulario si tiene valor
-      const fields = {
-        'name': r.name,
-        'country': r.country,
-        'age': r.age,
-        'weight_kg': r.weight_kg,
-        'division': r.division,
-        'height_cm': r.height_cm,
-        'reach_cm': r.reach_cm,
-        'wins': r.wins,
-        'losses': r.losses,
-        'draws': r.draws,
-        'ko_wins': r.ko_wins,
-        'sub_wins': r.sub_wins,
-        'years_experience': r.years_experience,
-      };
-
-      // Llenar campos de texto normales
-      for (const [fieldName, value] of Object.entries(fields)) {
-        if (value !== null && value !== undefined) {
-          const el = document.querySelector(`[name="${fieldName}"], #${fieldName}`);
-          if (el) el.value = value;
-        }
-      }
-
-      // Llenar sport (select)
-      if (r.sport) {
-        const sportEl = document.querySelector('[name="sport"], #sport');
-        if (sportEl) sportEl.value = r.sport;
-      }
-
-      // Llenar stance (select)
-      if (r.stance) {
-        const stanceEl = document.querySelector('[name="stance"], #stance');
-        if (stanceEl) stanceEl.value = r.stance;
-      }
-
-      // Llenar notas con info táctica
-      let notes = '';
-      if (r.style_summary) notes += `Estilo: ${r.style_summary}\n\n`;
-      if (r.known_strengths?.length) notes += `Fortalezas conocidas:\n${r.known_strengths.map(s => `• ${s}`).join('\n')}\n\n`;
-      if (r.known_weaknesses?.length) notes += `Debilidades conocidas:\n${r.known_weaknesses.map(w => `• ${w}`).join('\n')}\n\n`;
-      if (r.current_trainer) notes += `Entrenador: ${r.current_trainer}\n`;
-      if (r.gym) notes += `Gimnasio: ${r.gym}\n`;
-      if (r.source_notes) notes += `\nFuente: ${r.source_notes}`;
-
-      if (notes) {
-        const notesEl = document.querySelector('[name="notes"], #notes, textarea[name="notes"]');
-        if (notesEl) notesEl.value = notes.trim();
-      }
-
-      // Disparar evento para frameworks reactivos (Alpine.js)
-      document.querySelectorAll('input, select, textarea').forEach(el => {
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      });
     },
 
     resetSearch() {

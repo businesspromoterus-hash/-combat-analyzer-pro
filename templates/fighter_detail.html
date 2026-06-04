@@ -9,6 +9,85 @@
 
   <div x-show="fighter" x-cloak>
 
+    <!-- Acciones del perfil -->
+    <div class="flex justify-end gap-2 mt-4">
+      <button @click="startEdit()" class="btn-secondary text-sm">✏️ Editar</button>
+      <button @click="deleteFighter()" :disabled="deleting" class="btn-danger text-sm disabled:opacity-50">
+        <span x-show="!deleting">🗑️ Eliminar</span>
+        <span x-show="deleting">Eliminando...</span>
+      </button>
+    </div>
+
+    <!-- Panel de edición -->
+    <div x-show="editing" x-cloak class="card p-6 mt-3 mb-6 border-2 border-navy-700">
+      <h2 class="text-lg font-bold text-navy-900 mb-4">Editar peleador</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="label">Nombre</label>
+          <input x-model="editForm.name" class="input">
+        </div>
+        <div>
+          <label class="label">País</label>
+          <input x-model="editForm.country" class="input">
+        </div>
+        <div>
+          <label class="label">Edad</label>
+          <input type="number" x-model.number="editForm.age" class="input" min="10" max="80">
+        </div>
+        <div>
+          <label class="label">Peso (kg)</label>
+          <input type="number" x-model.number="editForm.weight_kg" class="input" step="0.1">
+        </div>
+        <div>
+          <label class="label">División</label>
+          <input x-model="editForm.division" class="input">
+        </div>
+        <div>
+          <label class="label">Guardia</label>
+          <select x-model="editForm.stance" class="input">
+            <option value="orthodox">Diestro (orthodox)</option>
+            <option value="southpaw">Zurdo (southpaw)</option>
+            <option value="switch">Switch</option>
+            <option value="na">N/A</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">Estatura (cm)</label>
+          <input type="number" x-model.number="editForm.height_cm" class="input">
+        </div>
+        <div>
+          <label class="label">Alcance (cm)</label>
+          <input type="number" x-model.number="editForm.reach_cm" class="input">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 md:grid-cols-5 gap-3 mt-4">
+        <div><label class="text-xs text-gray-500">Victorias</label><input type="number" x-model.number="editForm.wins" class="input" min="0"></div>
+        <div><label class="text-xs text-gray-500">Derrotas</label><input type="number" x-model.number="editForm.losses" class="input" min="0"></div>
+        <div><label class="text-xs text-gray-500">Empates</label><input type="number" x-model.number="editForm.draws" class="input" min="0"></div>
+        <div><label class="text-xs text-gray-500">KOs</label><input type="number" x-model.number="editForm.ko_wins" class="input" min="0"></div>
+        <div><label class="text-xs text-gray-500">Subs</label><input type="number" x-model.number="editForm.sub_wins" class="input" min="0"></div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 mt-4">
+        <div><label class="label">Exp. profesional (años)</label><input type="number" x-model.number="editForm.years_experience_pro" class="input" min="0" max="70"></div>
+        <div><label class="label">Exp. amateur (años)</label><input type="number" x-model.number="editForm.years_experience_amateur" class="input" min="0" max="70"></div>
+      </div>
+
+      <div class="mt-4">
+        <label class="label">Notas</label>
+        <textarea x-model="editForm.notes" class="input" rows="3"></textarea>
+      </div>
+
+      <div class="flex gap-2 mt-5">
+        <button @click="saveEdit()" :disabled="savingEdit" class="btn-primary disabled:opacity-50">
+          <span x-show="!savingEdit">Guardar cambios</span>
+          <span x-show="savingEdit">Guardando...</span>
+        </button>
+        <button @click="cancelEdit()" class="btn-secondary">Cancelar</button>
+      </div>
+    </div>
+
     <!-- Header del peleador -->
     <div class="card p-6 mt-4 mb-6">
       <div class="flex items-start justify-between flex-wrap gap-4">
@@ -33,7 +112,8 @@
         <div><div class="text-gray-500">Alcance</div><div class="font-bold" x-text="fighter && (fighter.reach_cm ? fighter.reach_cm + ' cm' : '—')"></div></div>
         <div><div class="text-gray-500">Guardia</div><div class="font-bold capitalize" x-text="fighter && fighter.stance"></div></div>
         <div><div class="text-gray-500">País</div><div class="font-bold" x-text="fighter && (fighter.country || '—')"></div></div>
-        <div><div class="text-gray-500">Exp.</div><div class="font-bold" x-text="fighter && (fighter.years_experience ? fighter.years_experience + ' años' : '—')"></div></div>
+        <div><div class="text-gray-500">Exp. Pro</div><div class="font-bold" x-text="fighter && (fighter.years_experience_pro != null ? fighter.years_experience_pro + ' años' : '—')"></div></div>
+        <div><div class="text-gray-500">Exp. Amateur</div><div class="font-bold" x-text="fighter && (fighter.years_experience_amateur != null ? fighter.years_experience_amateur + ' años' : '—')"></div></div>
         <div><div class="text-gray-500">KOs</div><div class="font-bold" x-text="fighter && fighter.ko_wins"></div></div>
         <div><div class="text-gray-500">Subs</div><div class="font-bold" x-text="fighter && fighter.sub_wins"></div></div>
       </div>
@@ -245,6 +325,65 @@ function fighterDetail(fighterId) {
     uploading: false,
     synthesizing: false,
     message: '',
+    editing: false,
+    savingEdit: false,
+    editForm: {},
+    deleting: false,
+
+    // ── Eliminar peleador ────────────────────────────────────────────────
+    async deleteFighter() {
+      const f = this.fighter || {};
+      if (!confirm(`¿Eliminar a ${f.name || 'este peleador'}? Se borrarán sus peleas, análisis y planes. Esta acción no se puede deshacer.`)) return;
+      this.deleting = true;
+      try {
+        const res = await fetch(`/api/fighters/${this.fighterId}`, { method: 'DELETE' });
+        if (!res.ok && res.status !== 204) throw new Error(await res.text());
+        window.location.href = '/';
+      } catch (e) {
+        this.showMessage('Error: ' + e.message);
+        this.deleting = false;
+      }
+    },
+
+    // ── Edición del perfil ───────────────────────────────────────────────
+    startEdit() {
+      const f = this.fighter || {};
+      this.editForm = {
+        name: f.name, country: f.country, age: f.age, weight_kg: f.weight_kg,
+        division: f.division, stance: f.stance, height_cm: f.height_cm,
+        reach_cm: f.reach_cm, wins: f.wins, losses: f.losses, draws: f.draws,
+        ko_wins: f.ko_wins, sub_wins: f.sub_wins,
+        years_experience_pro: f.years_experience_pro,
+        years_experience_amateur: f.years_experience_amateur,
+        notes: f.notes,
+      };
+      this.editing = true;
+    },
+    cancelEdit() {
+      this.editing = false;
+    },
+    async saveEdit() {
+      this.savingEdit = true;
+      try {
+        const payload = {};
+        for (const [k, v] of Object.entries(this.editForm)) {
+          if (v !== undefined && v !== '') payload[k] = v;
+        }
+        const res = await fetch(`/api/fighters/${this.fighterId}`, {
+          method: 'PATCH',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        this.fighter = await res.json();
+        this.editing = false;
+        this.showMessage('✓ Peleador actualizado');
+      } catch (e) {
+        this.showMessage('Error: ' + e.message);
+      } finally {
+        this.savingEdit = false;
+      }
+    },
 
     async load() {
       this.fighter = await fetch(`/api/fighters/${this.fighterId}`).then(r => r.json());
