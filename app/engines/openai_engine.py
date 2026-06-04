@@ -19,6 +19,7 @@ from app.engines.prompts import (
     SPORT_VOCABULARY, FIGHT_ANALYSIS_PROMPT,
     PROFILE_SYNTHESIS_PROMPT, FIGHT_PLAN_PROMPT
 )
+from app.engines.normalize import coerce_fight_plan
 
 
 class OpenAIEngine(AIEngine):
@@ -116,4 +117,4 @@ class OpenAIEngine(AIEngine):
             additional_context=additional_context or "ninguno",
         )
         raw = await self._complete(prompt, max_tokens=8000)
-        return CompleteFightPlan(**self._strip_json(raw))
+        return CompleteFightPlan(**coerce_fight_plan(self._strip_json(raw)))
