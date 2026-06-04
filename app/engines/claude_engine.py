@@ -15,8 +15,12 @@ from app.engines.base import (
     FighterStyleProfile,
     CompleteFightPlan,
 )
-from app.engines.prompts import SPORT_VOCABULARY, FIGHT_PLAN_PROMPT
-from app.engines.normalize import coerce_fight_plan
+from app.engines.prompts import (
+    SPORT_VOCABULARY,
+    FIGHT_PLAN_PROMPT,
+    PROFILE_SYNTHESIS_PROMPT,
+)
+from app.engines.normalize import coerce_fight_plan, coerce_profile
 
 
 FIGHT_PREDICTION_PROMPT = """
@@ -64,20 +68,20 @@ class ClaudeEngine(BaseStrategyEngine):
         individual_analyses: list,
         bio_data: Optional[dict] = None,
     ):
-        from app.engines.base import FighterStyleProfile
-        analyses_text = "\n\n".join(
-            f"=== PELEA {i+1} ===\n{json.dumps(a.model_dump(), ensure_ascii=False, indent=2)}"
-            for i, a in enumerate(individual_analyses)
+        # Usamos el prompt COMPARTIDO (prompts.PROFILE_SYNTHESIS_PROMPT), alineado
+        # con el esquema FighterStyleProfile y con lo que renderiza la UI. Antes
+        # este motor usaba un prompt mínimo ("responde en JSON con la estructura
+        # de FighterStyleProfile") que omitía/renombraba campos requeridos y
+        # provocaba ValidationError.
+        prompt = PROFILE_SYNTHESIS_PROMPT.format(
+            fighter_name=fighter_name,
+            sport=sport,
+            bio_data=json.dumps(bio_data or {}, ensure_ascii=False),
+            num_analyses=len(individual_analyses),
+            analyses_json=json.dumps(
+                [a.model_dump() for a in individual_analyses], ensure_ascii=False
+            ),
         )
-
-        prompt = f"""
-Sintetiza el perfil táctico de {fighter_name} ({sport}) basado en {len(individual_analyses)} peleas.
-
-ANÁLISIS:
-{analyses_text}
-
-Responde en JSON con la estructura de FighterStyleProfile. Solo JSON.
-""".strip()
 
         response = await asyncio.to_thread(
             self._client.messages.create,
@@ -88,7 +92,11 @@ Responde en JSON con la estructura de FighterStyleProfile. Solo JSON.
         raw = response.content[0].text.strip()
         raw = re.sub(r"^```json\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
-        data = json.loads(raw)
+        if not raw.lstrip().startswith("{"):
+            match = re.search(r"\{.*\}", raw, re.DOTALL)
+            if match:
+                raw = match.group(0)
+        data = coerce_profile(json.loads(raw), fighter_name)
         return FighterStyleProfile(**data)
 
     async def predict_fight(

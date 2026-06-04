@@ -102,3 +102,57 @@ def coerce_fight_plan(data: dict) -> dict:
         data[field] = [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
 
     return data
+
+
+# ── FighterStyleProfile ──────────────────────────────────────────────────────
+# Campos REQUERIDOS por el esquema (sin valor por defecto), agrupados por tipo.
+
+_PROFILE_TEXT_FIELDS = (
+    "overall_style",
+    "cardio_profile",
+    "mental_profile",
+    "historical_losses_pattern",
+    "matchup_history_vs_similar",
+    "summary",
+)
+_PROFILE_LIST_FIELDS = (
+    "consistent_strengths",
+    "consistent_weaknesses",
+    "signature_techniques",
+    "recurring_defensive_holes",
+)
+
+
+def coerce_profile(data: dict, fighter_name: Optional[str] = None) -> dict:
+    """
+    Garantiza que `data` sea válido para FighterStyleProfile.
+
+    - inyecta `fighter_name` si el modelo no lo devolvió;
+    - acepta la clave antigua `recurring_defensive_errors` y la mapea a
+      `recurring_defensive_holes` (nombre del esquema);
+    - strings requeridos -> "No determinado" si faltan o están vacíos;
+    - listas requeridas -> [] / [str(...)] según corresponda.
+    """
+    data = dict(data or {})
+
+    if fighter_name is not None:
+        data["fighter_name"] = data.get("fighter_name") or fighter_name
+
+    if not data.get("recurring_defensive_holes") and data.get("recurring_defensive_errors"):
+        data["recurring_defensive_holes"] = data["recurring_defensive_errors"]
+
+    for field in _PROFILE_TEXT_FIELDS:
+        value = data.get(field)
+        if not isinstance(value, str) or not value.strip():
+            data[field] = "No determinado"
+
+    for field in _PROFILE_LIST_FIELDS:
+        value = data.get(field)
+        if isinstance(value, list):
+            data[field] = [str(v) for v in value]
+        elif value in (None, ""):
+            data[field] = []
+        else:
+            data[field] = [str(value)]
+
+    return data
