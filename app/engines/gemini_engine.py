@@ -29,6 +29,56 @@ def _read_file_bytes(path: str) -> bytes:
         return f.read()
 
 
+# Campos REQUERIDOS por FightAnalysisResult (sin valor por defecto en el esquema).
+_REQUIRED_TEXT_FIELDS = (
+    "fighting_style",
+    "primary_stance_behavior",
+    "cardio_assessment",
+    "pressure_response",
+    "late_rounds_behavior",
+)
+_REQUIRED_LIST_FIELDS = (
+    "strengths",
+    "weaknesses",
+    "repeated_patterns",
+    "favorite_techniques",
+    "defensive_errors",
+)
+
+
+def _normalize_analysis_data(data: dict, fighter_name: str, sport: str) -> dict:
+    """
+    Asegura que el JSON devuelto por Gemini sea válido para FightAnalysisResult.
+
+    Gemini puede omitir campos requeridos, anidarlos o no devolver `sport`, lo
+    que provocaba un ValidationError al construir el modelo. Esta función:
+      - inyecta `fighter_name` y `sport`, que el motor conoce con certeza;
+      - garantiza que los campos de texto requeridos no queden vacíos;
+      - garantiza que las listas requeridas sean realmente listas.
+    Los campos opcionales se dejan tal cual (el esquema ya tiene defaults).
+    """
+    data = dict(data or {})
+
+    data["fighter_name"] = data.get("fighter_name") or fighter_name
+    data["sport"] = sport
+
+    for field in _REQUIRED_TEXT_FIELDS:
+        value = data.get(field)
+        if not isinstance(value, str) or not value.strip():
+            data[field] = "No determinado"
+
+    for field in _REQUIRED_LIST_FIELDS:
+        value = data.get(field)
+        if isinstance(value, list):
+            data[field] = [str(v) for v in value]
+        elif value in (None, ""):
+            data[field] = []
+        else:
+            data[field] = [str(value)]
+
+    return data
+
+
 # ── Prompt de búsqueda web (Claude busca info del peleador) ──────────────────
 
 WEB_RESEARCH_PROMPT = """
@@ -95,96 +145,62 @@ Cuando observes algo en el video, indica si:
 - CONTRADICE lo conocido — ej: "Contrario a lo reportado, su cardio se ve sólido en rounds tardíos"
 - ES NUEVO — ej: "Nuevo patrón no reportado: usa más el gancho al cuerpo"
 
-Genera el análisis completo en JSON:
+Genera el análisis completo en JSON con EXACTAMENTE estas claves
+(no renombres, no anides, no agregues claves nuevas):
 
 {{
   "fighter_name": "{fighter_name}",
-  "fight_summary": "resumen de la pelea y resultado",
-
-  "context_validation": {{
-    "confirms_public_knowledge": ["observación 1 que confirma lo conocido con timestamp", "observación 2"],
-    "contradicts_public_knowledge": ["observación que contradice lo conocido con timestamp"],
-    "new_discoveries": ["patrón nuevo no reportado públicamente con timestamp"]
-  }},
-
-  "offensive_patterns": {{
-    "favorite_strikes": [
-      "Técnica — Round X min Y:ZZ — confirma/contradice/nuevo"
-    ],
-    "entry_patterns": ["patrón con timestamp"],
-    "combination_sequences": ["combinación con timestamp"],
-    "clinch_offense": "descripción con timestamps",
-    "takedown_offense": "descripción con timestamps si aplica",
-    "ground_offense": "descripción con timestamps si aplica"
-  }},
-
-  "defensive_patterns": {{
-    "primary_defense": "sistema defensivo principal",
-    "head_movement": "descripción con timestamps",
-    "footwork_defense": "descripción con timestamps",
-    "frequent_defensive_errors": [
-      "Error — Round X min Y:ZZ, Round A min B:CC — conocido públicamente / nuevo descubrimiento"
-    ],
-    "vulnerable_angles": ["ángulo con timestamp"],
-    "clinch_defense": "descripción con timestamps",
-    "takedown_defense": "descripción con timestamps si aplica"
-  }},
-
-  "physical_attributes": {{
-    "cardio_assessment": "evaluación con timestamps — compara con reputación pública",
-    "power_level": "con timestamps de momentos de poder",
-    "chin_durability": "con timestamps de impactos recibidos",
-    "speed_assessment": "con timestamps — compara con reputación",
-    "strength_in_clinch": "con timestamps"
-  }},
-
-  "mental_game": {{
-    "pressure_response": "con timestamps — compara con lo conocido públicamente",
-    "dominant_response": "con timestamps",
-    "adversity_handling": "con timestamps",
-    "corner_instruction_response": "con timestamps de ajustes visibles",
-    "risk_taking": "con timestamps"
-  }},
-
-  "round_by_round_notes": {{
-    "round_1": "análisis con momentos clave",
-    "round_2": "análisis",
-    "round_3": "análisis",
-    "round_4_plus": "rounds intermedios con timestamps",
-    "late_rounds": "rounds finales con timestamps — compara con reputación de cardio",
-    "rhythm_drops": ["bajón con timestamp y contexto"]
-  }},
-
+  "sport": "{sport}",
+  "fighting_style": "estilo de pelea observado en el video, con contexto público",
+  "primary_stance_behavior": "guardia/postura principal (orthodox/southpaw/switch) y cómo la usa",
+  "strengths": [
+    "Fortaleza — Round X min Y:ZZ — confirma reputación pública / nuevo descubrimiento"
+  ],
+  "weaknesses": [
+    "Debilidad — Round X min Y:ZZ — conocida públicamente / nueva en este video"
+  ],
+  "repeated_patterns": [
+    "Patrón repetido — TODOS los Round X min Y:ZZ donde ocurre"
+  ],
+  "favorite_techniques": [
+    "Técnica/golpe favorito — Round X min Y:ZZ — confirma/contradice/nuevo"
+  ],
+  "defensive_errors": [
+    "Error defensivo — Round X min Y:ZZ (y otros momentos) — conocido / nuevo"
+  ],
+  "when_hand_drops": "cuándo y en qué momentos baja la mano (timestamps), o null",
+  "cardio_assessment": "evaluación del cardio con timestamps — compara con reputación pública",
+  "pressure_response": "cómo responde a la presión, con timestamps — compara con lo conocido",
+  "late_rounds_behavior": "comportamiento en rounds finales con timestamps — compara con reputación de cardio",
+  "fatigue_signs": "señales visibles de cansancio con timestamps, o null",
+  "mental_state": "estado mental durante la pelea, o null",
+  "vs_orthodox": "comportamiento frente a diestros con timestamps, o null",
+  "vs_southpaw": "comportamiento frente a zurdos con timestamps, o null",
+  "shots_received_most": ["qué golpes/técnicas le conectan más, con timestamps"],
+  "movement_pattern": "cómo se mueve (footwork, ángulos) con timestamps, o null",
+  "defense_style": "sistema defensivo principal (head movement, guardia, etc.), o null",
+  "corner_instructions": "instrucciones de la esquina y ajustes visibles, o null",
+  "between_rounds_adjustments": "qué ajusta o no entre rounds, o null",
+  "win_loss_cause": "por qué ganó o perdió esta pelea, con timestamps y contexto público",
   "key_moments": [
     {{
       "round": 3,
       "timestamp": "1:45",
       "type": "weakness",
       "description": "descripción del momento",
-      "public_context": "esto es conocido públicamente / esto es un nuevo descubrimiento",
       "importance": "alta/media/baja"
     }}
   ],
-
-  "fight_result_analysis": {{
-    "result": "ganó/perdió/empate",
-    "why_won_or_lost": "análisis con timestamps y contexto público",
-    "turning_point": "Round X min Y:ZZ",
-    "adjustments_made": "con timestamps"
-  }},
-
-  "strengths": [
-    "Fortaleza — Round X min Y — confirma reputación pública / nuevo descubrimiento"
-  ],
-
-  "weaknesses": [
-    "Debilidad — Round X min Y — conocida públicamente / nueva en este video"
-  ],
-
-  "intelligence_summary": "resumen combinando lo del video con el contexto de internet — qué confirma, qué contradice, qué es nuevo"
+  "danger_signs": ["señal de peligro detectada con timestamp"],
+  "confidence": 0.8,
+  "notes": "resumen ejecutivo combinando el video con el contexto de internet — qué confirma, qué contradice, qué es nuevo"
 }}
 
 REGLA DE ORO: Cada observación debe tener Round + minuto Y contexto (confirma/contradice/nuevo).
+Los campos de texto REQUERIDOS (fighting_style, primary_stance_behavior, cardio_assessment,
+pressure_response, late_rounds_behavior) NUNCA pueden quedar vacíos. Las listas REQUERIDAS
+(strengths, weaknesses, repeated_patterns, favorite_techniques, defensive_errors) deben tener
+al menos un elemento.
 
 Responde SOLO con el JSON. Sin markdown.
 """.strip()
@@ -394,7 +410,13 @@ class GeminiEngine(BaseVideoEngine):
         raw = response.text.strip()
         raw = re.sub(r"^```json\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
+        # Gemini a veces antepone texto al JSON; extraer el objeto balanceado.
+        if not raw.lstrip().startswith("{"):
+            match = re.search(r"\{.*\}", raw, re.DOTALL)
+            if match:
+                raw = match.group(0)
         data = json.loads(raw)
+        data = _normalize_analysis_data(data, fighter_name, sport)
         return FightAnalysisResult(**data)
 
     async def synthesize_fighter_profile(
