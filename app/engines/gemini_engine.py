@@ -10,6 +10,7 @@ FLUJO:
 import json
 import re
 import asyncio
+import mimetypes
 from typing import Optional
 import anthropic
 import google.generativeai as genai
@@ -20,6 +21,12 @@ from app.engines.base import (
     FightAnalysisResult,
     FighterStyleProfile,
 )
+
+
+def _read_file_bytes(path: str) -> bytes:
+    """Lee el contenido binario de un archivo de video subido."""
+    with open(path, "rb") as f:
+        return f.read()
 
 
 # ── Prompt de búsqueda web (Claude busca info del peleador) ──────────────────
@@ -356,14 +363,29 @@ class GeminiEngine(BaseVideoEngine):
             web_context=json.dumps(web_context, ensure_ascii=False, indent=2),
         )
 
-        # Fase 2: Gemini analiza el video con contexto
+        # Fase 2: Gemini analiza el video con contexto.
+        #
+        # Hay dos flujos distintos según el origen del video:
+        #
+        #  • ENLACE (YouTube u otra URL): Gemini debe MIRAR el video directamente
+        #    desde la URL. Se pasa como file_data/file_uri — NO se descarga ni se
+        #    convierte a archivo. Gemini accede al video por la URL tal cual.
+        #
+        #  • ARCHIVO SUBIDO: se envía el contenido binario del video como
+        #    inline_data (bytes incrustados en la petición).
         if video_source.startswith("http"):
-            contents = [prompt, {"video_url": video_source}]
+            video_part = {"file_data": {"file_uri": video_source}}
         else:
-            video_file = await asyncio.to_thread(
-                genai.upload_file, video_source
-            )
-            contents = [prompt, video_file]
+            mime_type, _ = mimetypes.guess_type(video_source)
+            video_bytes = await asyncio.to_thread(_read_file_bytes, video_source)
+            video_part = {
+                "inline_data": {
+                    "mime_type": mime_type or "video/mp4",
+                    "data": video_bytes,
+                }
+            }
+
+        contents = [prompt, video_part]
 
         response = await asyncio.to_thread(
             self._model.generate_content, contents

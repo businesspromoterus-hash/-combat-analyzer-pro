@@ -40,7 +40,18 @@
         </div>
         <div>
           <label class="label">División</label>
-          <input x-model="editForm.division" class="input">
+          <select x-show="editDivisionOptions.length" x-model="editDivisionSelect"
+                  @change="onEditDivisionSelect()" class="input">
+            <option value="">Selecciona división...</option>
+            <template x-for="d in editDivisionOptions" :key="d">
+              <option :value="d" x-text="d"></option>
+            </template>
+            <option value="__custom__">— Otra / personalizada —</option>
+          </select>
+          <input x-show="!editDivisionOptions.length || editDivisionCustom"
+                 x-model="editForm.division" class="input"
+                 :class="(editDivisionOptions.length && editDivisionCustom) ? 'mt-2' : ''"
+                 placeholder="Ej. -73 kg, Catchweight, Openweight">
         </div>
         <div>
           <label class="label">Guardia</label>
@@ -61,12 +72,14 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-3 md:grid-cols-5 gap-3 mt-4">
-        <div><label class="text-xs text-gray-500">Victorias</label><input type="number" x-model.number="editForm.wins" class="input" min="0"></div>
-        <div><label class="text-xs text-gray-500">Derrotas</label><input type="number" x-model.number="editForm.losses" class="input" min="0"></div>
-        <div><label class="text-xs text-gray-500">Empates</label><input type="number" x-model.number="editForm.draws" class="input" min="0"></div>
-        <div><label class="text-xs text-gray-500">KOs</label><input type="number" x-model.number="editForm.ko_wins" class="input" min="0"></div>
-        <div><label class="text-xs text-gray-500">Subs</label><input type="number" x-model.number="editForm.sub_wins" class="input" min="0"></div>
+      <!-- Récord — cada campo es totalmente independiente -->
+      <div class="grid grid-cols-3 md:grid-cols-6 gap-3 mt-4">
+        <div><label class="text-xs text-gray-500">Victorias</label><input type="number" x-model.number="editForm.wins" class="input w-full" min="0"></div>
+        <div><label class="text-xs text-gray-500">Derrotas</label><input type="number" x-model.number="editForm.losses" class="input w-full" min="0"></div>
+        <div><label class="text-xs text-gray-500">Empates</label><input type="number" x-model.number="editForm.draws" class="input w-full" min="0"></div>
+        <div><label class="text-xs text-gray-500">KOs</label><input type="number" x-model.number="editForm.ko_wins" class="input w-full" min="0"></div>
+        <div><label class="text-xs text-gray-500">Subs</label><input type="number" x-model.number="editForm.sub_wins" class="input w-full" min="0"></div>
+        <div><label class="text-xs text-gray-500">Ippons</label><input type="number" x-model.number="editForm.ippon_wins" class="input w-full" min="0"></div>
       </div>
 
       <div class="grid grid-cols-2 gap-3 mt-4">
@@ -329,6 +342,58 @@ function fighterDetail(fighterId) {
     savingEdit: false,
     editForm: {},
     deleting: false,
+    // Selector de división en modo edición. editDivisionSelect controla el
+    // <select>; si el deporte no tiene divisiones estándar o el entrenador
+    // elige "Otra", editDivisionCustom revela un campo libre. editForm.division
+    // es siempre el valor real que se guarda.
+    editDivisionSelect: '',
+    editDivisionCustom: false,
+    BOXING_DIVISIONS: [
+      'Minimumweight', 'Light Flyweight', 'Flyweight', 'Super Flyweight',
+      'Bantamweight', 'Super Bantamweight', 'Featherweight', 'Super Featherweight',
+      'Lightweight', 'Super Lightweight', 'Welterweight', 'Super Welterweight',
+      'Middleweight', 'Super Middleweight', 'Light Heavyweight', 'Cruiserweight',
+      'Heavyweight',
+    ],
+    MMA_DIVISIONS: [
+      'Flyweight (125 lb)', 'Bantamweight (135 lb)', 'Featherweight (145 lb)',
+      'Lightweight (155 lb)', 'Welterweight (170 lb)', 'Middleweight (185 lb)',
+      'Light Heavyweight (205 lb)', 'Heavyweight (265 lb)',
+      "Women's Strawweight (115 lb)", "Women's Flyweight (125 lb)",
+      "Women's Bantamweight (135 lb)", "Women's Featherweight (145 lb)",
+    ],
+    get editDivisionOptions() {
+      const s = this.fighter && this.fighter.sport;
+      if (s === 'boxing' || s === 'bkfc') return this.BOXING_DIVISIONS;
+      if (s === 'mma') return this.MMA_DIVISIONS;
+      return [];
+    },
+    onEditDivisionSelect() {
+      if (this.editDivisionSelect === '__custom__') {
+        this.editDivisionCustom = true;
+        this.editForm.division = '';
+      } else {
+        this.editDivisionCustom = false;
+        this.editForm.division = this.editDivisionSelect;
+      }
+    },
+    syncEditDivisionSelect() {
+      const opts = this.editDivisionOptions;
+      const current = this.editForm.division;
+      if (!opts.length) {
+        this.editDivisionCustom = false;
+        this.editDivisionSelect = '';
+      } else if (current && opts.includes(current)) {
+        this.editDivisionSelect = current;
+        this.editDivisionCustom = false;
+      } else if (current) {
+        this.editDivisionSelect = '__custom__';
+        this.editDivisionCustom = true;
+      } else {
+        this.editDivisionSelect = '';
+        this.editDivisionCustom = false;
+      }
+    },
 
     // ── Eliminar peleador ────────────────────────────────────────────────
     async deleteFighter() {
@@ -352,11 +417,12 @@ function fighterDetail(fighterId) {
         name: f.name, country: f.country, age: f.age, weight_kg: f.weight_kg,
         division: f.division, stance: f.stance, height_cm: f.height_cm,
         reach_cm: f.reach_cm, wins: f.wins, losses: f.losses, draws: f.draws,
-        ko_wins: f.ko_wins, sub_wins: f.sub_wins,
+        ko_wins: f.ko_wins, sub_wins: f.sub_wins, ippon_wins: f.ippon_wins,
         years_experience_pro: f.years_experience_pro,
         years_experience_amateur: f.years_experience_amateur,
         notes: f.notes,
       };
+      this.syncEditDivisionSelect();
       this.editing = true;
     },
     cancelEdit() {
