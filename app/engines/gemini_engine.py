@@ -79,6 +79,58 @@ def _normalize_analysis_data(data: dict, fighter_name: str, sport: str) -> dict:
     return data
 
 
+# Campos REQUERIDOS por FighterStyleProfile (sin valor por defecto en el esquema).
+_REQUIRED_PROFILE_TEXT_FIELDS = (
+    "overall_style",
+    "cardio_profile",
+    "mental_profile",
+    "historical_losses_pattern",
+    "matchup_history_vs_similar",
+    "summary",
+)
+_REQUIRED_PROFILE_LIST_FIELDS = (
+    "consistent_strengths",
+    "consistent_weaknesses",
+    "signature_techniques",
+    "recurring_defensive_holes",
+)
+
+
+def _normalize_profile_data(data: dict, fighter_name: str) -> dict:
+    """
+    Asegura que el JSON de síntesis sea válido para FighterStyleProfile.
+
+    Igual que `_normalize_analysis_data` pero para el perfil consolidado: Gemini
+    podía devolver `recurring_defensive_errors` en vez de la clave del esquema
+    `recurring_defensive_holes`, u omitir campos requeridos, provocando un
+    ValidationError. Esta función inyecta `fighter_name`, rellena los textos
+    requeridos vacíos y normaliza las listas requeridas.
+    """
+    data = dict(data or {})
+
+    data["fighter_name"] = data.get("fighter_name") or fighter_name
+
+    # Compatibilidad: aceptar el nombre antiguo de la clave si aún apareciera.
+    if not data.get("recurring_defensive_holes") and data.get("recurring_defensive_errors"):
+        data["recurring_defensive_holes"] = data["recurring_defensive_errors"]
+
+    for field in _REQUIRED_PROFILE_TEXT_FIELDS:
+        value = data.get(field)
+        if not isinstance(value, str) or not value.strip():
+            data[field] = "No determinado"
+
+    for field in _REQUIRED_PROFILE_LIST_FIELDS:
+        value = data.get(field)
+        if isinstance(value, list):
+            data[field] = [str(v) for v in value]
+        elif value in (None, ""):
+            data[field] = []
+        else:
+            data[field] = [str(value)]
+
+    return data
+
+
 # ── Prompt de búsqueda web (Claude busca info del peleador) ──────────────────
 
 WEB_RESEARCH_PROMPT = """
@@ -225,73 +277,35 @@ DATOS BIO: {bio_data}
 ANÁLISIS DE PELEAS:
 {analyses_text}
 
-Genera el reporte completo en JSON:
+Genera el reporte de scouting en JSON con EXACTAMENTE estas claves
+(no renombres, no anides, no agregues claves nuevas):
 
 {{
   "fighter_name": "{fighter_name}",
-  "sport": "{sport}",
-  "fights_reviewed": {num_fights},
-
-  "intelligence_confidence": "alta/media/baja — qué tan confiable es el scouting basado en fuentes disponibles",
-
-  "overall_style": "descripción completa combinando video + fuentes públicas",
-
+  "overall_style": "estilo general completo combinando video + fuentes públicas",
   "consistent_strengths": [
-    "Fortaleza — confirmada en video (timestamps) + fuentes públicas",
-    "mínimo 6 fortalezas con referencias"
+    "Fortaleza — confirmada en video (timestamps de varias peleas) + fuentes públicas (mínimo 6)"
   ],
-
   "consistent_weaknesses": [
-    "Debilidad — timestamps de todas las peleas + contexto público",
-    "mínimo 6 debilidades"
+    "Debilidad — timestamps de todas las peleas + contexto público (mínimo 6)"
   ],
-
   "signature_techniques": [
-    "Técnica con timestamps y contexto público",
-    "mínimo 5 técnicas"
+    "Técnica distintiva con timestamps y contexto público (mínimo 5)"
   ],
-
-  "recurring_defensive_errors": [
-    "Error — timestamps múltiples peleas — conocido/nuevo descubrimiento",
-    "mínimo 4 errores"
+  "recurring_defensive_holes": [
+    "Hueco defensivo recurrente — timestamps de múltiples peleas — conocido/nuevo (mínimo 4)"
   ],
-
-  "key_moments_across_fights": [
-    {{
-      "fight": "vs Rival",
-      "round": 3,
-      "timestamp": "1:45",
-      "type": "weakness",
-      "description": "descripción",
-      "source": "video / video+internet / internet"
-    }}
-  ],
-
-  "confirmed_by_multiple_sources": [
-    "patrón confirmado tanto en video como en fuentes públicas"
-  ],
-
-  "new_discoveries_video_only": [
-    "patrón nuevo encontrado en video que no está reportado públicamente"
-  ],
-
-  "contradictions_found": [
-    "algo que contradice su reputación pública — con evidencia del video"
-  ],
-
-  "cardio_profile": "evaluación con timestamps y comparación con reputación pública",
-  "late_round_behavior": "con timestamps",
-  "rhythm_drop_patterns": ["patrón con timestamps de múltiples peleas"],
-  "mental_profile": "con timestamps y contexto público",
-  "corner_adaptability": "con evidencia de video",
-  "strategy_evolution": "con evidencia de video",
-  "historical_losses_pattern": "con referencias de video e internet",
-  "historical_wins_pattern": "con referencias",
-  "matchup_history_vs_similar": "con timestamps y referencias",
-  "orthodox_vs_southpaw": "con timestamps",
-
+  "cardio_profile": "evaluación del cardio con timestamps y comparación con reputación pública",
+  "mental_profile": "respuesta a presión y adversidad, con timestamps y contexto público",
+  "historical_losses_pattern": "cómo ha perdido históricamente — referencias de video e internet",
+  "matchup_history_vs_similar": "rendimiento frente a peleadores de perfil similar al nuestro, con timestamps y referencias",
   "summary": "resumen ejecutivo combinando video + internet — 5-6 oraciones para el entrenador"
 }}
+
+Los campos de texto REQUERIDOS (overall_style, cardio_profile, mental_profile,
+historical_losses_pattern, matchup_history_vs_similar, summary) NUNCA pueden quedar vacíos.
+Las listas REQUERIDAS (consistent_strengths, consistent_weaknesses, signature_techniques,
+recurring_defensive_holes) deben tener al menos un elemento.
 
 Responde SOLO con el JSON. Sin markdown.
 """.strip()
@@ -449,5 +463,11 @@ class GeminiEngine(BaseVideoEngine):
         raw = response.text.strip()
         raw = re.sub(r"^```json\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
+        # Gemini a veces antepone texto al JSON; extraer el objeto balanceado.
+        if not raw.lstrip().startswith("{"):
+            match = re.search(r"\{.*\}", raw, re.DOTALL)
+            if match:
+                raw = match.group(0)
         data = json.loads(raw)
+        data = _normalize_profile_data(data, fighter_name)
         return FighterStyleProfile(**data)
