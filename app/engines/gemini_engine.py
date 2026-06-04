@@ -21,114 +21,13 @@ from app.engines.base import (
     FightAnalysisResult,
     FighterStyleProfile,
 )
+from app.engines.normalize import coerce_analysis, coerce_profile
 
 
 def _read_file_bytes(path: str) -> bytes:
     """Lee el contenido binario de un archivo de video subido."""
     with open(path, "rb") as f:
         return f.read()
-
-
-# Campos REQUERIDOS por FightAnalysisResult (sin valor por defecto en el esquema).
-_REQUIRED_TEXT_FIELDS = (
-    "fighting_style",
-    "primary_stance_behavior",
-    "cardio_assessment",
-    "pressure_response",
-    "late_rounds_behavior",
-)
-_REQUIRED_LIST_FIELDS = (
-    "strengths",
-    "weaknesses",
-    "repeated_patterns",
-    "favorite_techniques",
-    "defensive_errors",
-)
-
-
-def _normalize_analysis_data(data: dict, fighter_name: str, sport: str) -> dict:
-    """
-    Asegura que el JSON devuelto por Gemini sea válido para FightAnalysisResult.
-
-    Gemini puede omitir campos requeridos, anidarlos o no devolver `sport`, lo
-    que provocaba un ValidationError al construir el modelo. Esta función:
-      - inyecta `fighter_name` y `sport`, que el motor conoce con certeza;
-      - garantiza que los campos de texto requeridos no queden vacíos;
-      - garantiza que las listas requeridas sean realmente listas.
-    Los campos opcionales se dejan tal cual (el esquema ya tiene defaults).
-    """
-    data = dict(data or {})
-
-    data["fighter_name"] = data.get("fighter_name") or fighter_name
-    data["sport"] = sport
-
-    for field in _REQUIRED_TEXT_FIELDS:
-        value = data.get(field)
-        if not isinstance(value, str) or not value.strip():
-            data[field] = "No determinado"
-
-    for field in _REQUIRED_LIST_FIELDS:
-        value = data.get(field)
-        if isinstance(value, list):
-            data[field] = [str(v) for v in value]
-        elif value in (None, ""):
-            data[field] = []
-        else:
-            data[field] = [str(value)]
-
-    return data
-
-
-# Campos REQUERIDOS por FighterStyleProfile (sin valor por defecto en el esquema).
-_REQUIRED_PROFILE_TEXT_FIELDS = (
-    "overall_style",
-    "cardio_profile",
-    "mental_profile",
-    "historical_losses_pattern",
-    "matchup_history_vs_similar",
-    "summary",
-)
-_REQUIRED_PROFILE_LIST_FIELDS = (
-    "consistent_strengths",
-    "consistent_weaknesses",
-    "signature_techniques",
-    "recurring_defensive_holes",
-)
-
-
-def _normalize_profile_data(data: dict, fighter_name: str) -> dict:
-    """
-    Asegura que el JSON de síntesis sea válido para FighterStyleProfile.
-
-    Igual que `_normalize_analysis_data` pero para el perfil consolidado: Gemini
-    podía devolver `recurring_defensive_errors` en vez de la clave del esquema
-    `recurring_defensive_holes`, u omitir campos requeridos, provocando un
-    ValidationError. Esta función inyecta `fighter_name`, rellena los textos
-    requeridos vacíos y normaliza las listas requeridas.
-    """
-    data = dict(data or {})
-
-    data["fighter_name"] = data.get("fighter_name") or fighter_name
-
-    # Compatibilidad: aceptar el nombre antiguo de la clave si aún apareciera.
-    if not data.get("recurring_defensive_holes") and data.get("recurring_defensive_errors"):
-        data["recurring_defensive_holes"] = data["recurring_defensive_errors"]
-
-    for field in _REQUIRED_PROFILE_TEXT_FIELDS:
-        value = data.get(field)
-        if not isinstance(value, str) or not value.strip():
-            data[field] = "No determinado"
-
-    for field in _REQUIRED_PROFILE_LIST_FIELDS:
-        value = data.get(field)
-        if isinstance(value, list):
-            data[field] = [str(v) for v in value]
-        elif value in (None, ""):
-            data[field] = []
-        else:
-            data[field] = [str(value)]
-
-    return data
 
 
 # ── Prompt de búsqueda web (Claude busca info del peleador) ──────────────────
@@ -430,7 +329,7 @@ class GeminiEngine(BaseVideoEngine):
             if match:
                 raw = match.group(0)
         data = json.loads(raw)
-        data = _normalize_analysis_data(data, fighter_name, sport)
+        data = coerce_analysis(data, fighter_name, sport)
         return FightAnalysisResult(**data)
 
     async def synthesize_fighter_profile(
@@ -469,5 +368,5 @@ class GeminiEngine(BaseVideoEngine):
             if match:
                 raw = match.group(0)
         data = json.loads(raw)
-        data = _normalize_profile_data(data, fighter_name)
+        data = coerce_profile(data, fighter_name)
         return FighterStyleProfile(**data)

@@ -35,6 +35,56 @@ def loads_lenient(raw: str) -> dict:
     return json.loads(extract_json_object(raw))
 
 
+# ── FightAnalysisResult ──────────────────────────────────────────────────────
+# Campos REQUERIDOS por el esquema (sin valor por defecto), agrupados por tipo.
+
+_ANALYSIS_TEXT_FIELDS = (
+    "fighting_style",
+    "primary_stance_behavior",
+    "cardio_assessment",
+    "pressure_response",
+    "late_rounds_behavior",
+)
+_ANALYSIS_LIST_FIELDS = (
+    "strengths",
+    "weaknesses",
+    "repeated_patterns",
+    "favorite_techniques",
+    "defensive_errors",
+)
+
+
+def coerce_analysis(data: dict, fighter_name: str, sport: str) -> dict:
+    """
+    Garantiza que `data` sea válido para FightAnalysisResult.
+
+    - inyecta `fighter_name` y `sport`, que el motor conoce con certeza;
+    - strings requeridos -> "No determinado" si faltan o están vacíos;
+    - listas requeridas -> [] / [str(...)] según corresponda.
+    Los campos opcionales se dejan tal cual (el esquema ya tiene defaults).
+    """
+    data = dict(data or {})
+
+    data["fighter_name"] = data.get("fighter_name") or fighter_name
+    data["sport"] = sport
+
+    for field in _ANALYSIS_TEXT_FIELDS:
+        value = data.get(field)
+        if not isinstance(value, str) or not value.strip():
+            data[field] = "No determinado"
+
+    for field in _ANALYSIS_LIST_FIELDS:
+        value = data.get(field)
+        if isinstance(value, list):
+            data[field] = [str(v) for v in value]
+        elif value in (None, ""):
+            data[field] = []
+        else:
+            data[field] = [str(value)]
+
+    return data
+
+
 # ── CompleteFightPlan ────────────────────────────────────────────────────────
 # Campos REQUERIDOS por el esquema (sin valor por defecto), agrupados por tipo.
 
