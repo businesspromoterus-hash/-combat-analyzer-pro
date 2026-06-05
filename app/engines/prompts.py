@@ -121,6 +121,11 @@ INSTRUCCIONES:
 3. Identifica el PATRÓN HISTÓRICO DE DERROTAS: ¿cómo le han ganado? ¿qué tipo de peleador le complica?
 4. Si hay peleas vs estilos similares al nuestro, dales énfasis especial.
 5. Evolución: ¿está mejorando, estancado, declinando?
+6. Usa el desglose "round_by_round" de cada análisis para fundamentar el cardio
+   (cómo rinde en rounds tardíos), el perfil mental (cómo reacciona tras recibir
+   daño o un knockdown) y las debilidades recurrentes por round.
+7. Tu salida DEBE poblar todos los campos: estilo, fortalezas, debilidades,
+   cardio y perfil mental — usando TODAS las peleas analizadas que recibiste.
 
 FORMATO JSON ESTRICTO:
 

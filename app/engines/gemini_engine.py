@@ -90,6 +90,28 @@ el ROUND en el que ocurre (ej: "Round 3"). NO indiques el minuto ni el
 timestamp exacto — solo el round. Si es un patrón repetido, menciona TODOS
 los rounds en los que aparece.
 
+══════════════════════════════════════════════════════════════════════
+INSTRUCCIÓN OBLIGATORIA — ANÁLISIS RONDA POR RONDA (round_by_round):
+Es la parte MÁS IMPORTANTE del reporte. DEBES recorrer el video round por
+round, desde el Round 1 hasta el último round de la pelea, sin saltarte
+ninguno. Para CADA round entrega un objeto con:
+  • "round": número del round (int).
+  • "key_moments": momentos clave del round — knockdowns/derribos, cortes,
+    golpes grandes que conectaron, momentos en que alguien se tambaleó, la
+    campana salvando a alguien, puntos deducidos, sumisiones intentadas, etc.
+    Sé concreto y narrativo. Ej: "Ramírez mandó a la lona a Espinoza con un
+    gancho de izquierda a 30s del final; Espinoza se salvó por la campana."
+    Si en ese round no pasó nada destacable, dilo explícitamente
+    ("Round de estudio, sin daño significativo").
+  • "dominated_by": quién dominó el round y por qué (nombre del peleador).
+  • "style_notes": observaciones de estilo en ese round — qué intentó cada
+    quien, ajustes tácticos, distancia, presión, qué armas usó.
+  • "fatigue_signs": señales de fatiga visibles en ese round (boca abierta,
+    manos abajo, menos volumen, piernas pesadas) o "ninguna visible".
+Nunca dejes round_by_round vacío: si solo puedes estimar los rounds, hazlo
+y márcalo en "notes". Cada round del video DEBE aparecer como un objeto.
+══════════════════════════════════════════════════════════════════════
+
 INSTRUCCIÓN DE ENRIQUECIMIENTO:
 Cuando observes algo en el video, indica si:
 - CONFIRMA lo que se sabe públicamente — ej: "Confirma su reputación de buen jab"
@@ -118,6 +140,22 @@ Genera el análisis completo en JSON con EXACTAMENTE estas claves
   ],
   "defensive_errors": [
     "Error defensivo — Round X (y otros rounds) — conocido / nuevo"
+  ],
+  "round_by_round": [
+    {{
+      "round": 1,
+      "key_moments": "momentos clave del round (knockdowns, cortes, golpes grandes, salvado por la campana, etc.)",
+      "dominated_by": "quién dominó el round y por qué",
+      "style_notes": "observaciones de estilo y ajustes tácticos en este round",
+      "fatigue_signs": "señales de fatiga en este round, o 'ninguna visible'"
+    }},
+    {{
+      "round": 2,
+      "key_moments": "...",
+      "dominated_by": "...",
+      "style_notes": "...",
+      "fatigue_signs": "..."
+    }}
   ],
   "when_hand_drops": "en qué rounds baja la mano (solo el round, sin minuto), o null",
   "cardio_assessment": "evaluación del cardio por round — compara con reputación pública",
@@ -151,7 +189,8 @@ timestamp exacto) Y el contexto (confirma/contradice/nuevo).
 Los campos de texto REQUERIDOS (fighting_style, primary_stance_behavior, cardio_assessment,
 pressure_response, late_rounds_behavior) NUNCA pueden quedar vacíos. Las listas REQUERIDAS
 (strengths, weaknesses, repeated_patterns, favorite_techniques, defensive_errors) deben tener
-al menos un elemento.
+al menos un elemento. La lista "round_by_round" es OBLIGATORIA y debe contener un objeto
+por CADA round de la pelea, en orden, nunca vacía.
 
 Responde SOLO con el JSON. Sin markdown.
 """.strip()

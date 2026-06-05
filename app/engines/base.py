@@ -31,6 +31,14 @@ class FightAnalysisResult(BaseModel):
     defensive_errors: list[str]
     when_hand_drops: Optional[str] = None         # ¿cuándo baja la mano específicamente?
 
+    # Desglose RONDA POR RONDA — obligatorio para el motor de video.
+    # Cada item describe un round: momentos clave (knockdowns, cortes, golpes
+    # grandes), quién dominó, observaciones de estilo y señales de fatiga.
+    # Ej: {"round": 5, "key_moments": "Ramírez mandó a la lona a Espinoza con
+    #      un gancho de izquierda; Espinoza se salvó por la campana",
+    #      "dominated_by": "Ramírez", "style_notes": "...", "fatigue_signs": "..."}
+    round_by_round: list[dict] = []
+
     # Estado físico y mental
     cardio_assessment: str
     pressure_response: str

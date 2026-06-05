@@ -2,6 +2,28 @@
 {% block title %}Peleador - Combat Analyzer Pro{% endblock %}
 
 {% block content %}
+<style>
+  /* Barra de progreso indeterminada para el análisis con IA. */
+  @keyframes ca-progress-indeterminate {
+    0%   { left: -40%; width: 40%; }
+    50%  { left: 25%;  width: 50%; }
+    100% { left: 100%; width: 40%; }
+  }
+  .ca-progress-track {
+    position: relative;
+    overflow: hidden;
+    background-color: rgba(255, 255, 255, 0.25);
+    border-radius: 9999px;
+  }
+  .ca-progress-track > .ca-progress-bar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background-color: #C9A961; /* gold-500 */
+    border-radius: 9999px;
+    animation: ca-progress-indeterminate 1.6s ease-in-out infinite;
+  }
+</style>
 <div x-data="fighterDetail({{ fighter_id }})" x-init="load()">
   <a href="/" class="text-navy-700 hover:underline">← Volver al inicio</a>
 
@@ -151,6 +173,26 @@
         <span class="text-sm text-gray-500" x-text="fights.length + ' pelea(s)'"></span>
       </div>
 
+      <!-- Banner de progreso del análisis con IA -->
+      <div x-show="analyzing" x-cloak
+           class="bg-navy-900 text-white rounded-xl p-4 mb-4 shadow-md">
+        <div class="flex items-center gap-3">
+          <svg class="animate-spin h-6 w-6 text-gold-500 shrink-0" xmlns="http://www.w3.org/2000/svg"
+               fill="none" viewBox="0 0 24 24" aria-hidden="true">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          <div class="flex-1">
+            <p class="font-bold">Analizando pelea con IA<span x-text="loadingDots"></span></p>
+            <p class="text-sm text-gray-300">esto puede tomar varios minutos</p>
+          </div>
+        </div>
+        <div class="ca-progress-track h-2 mt-3">
+          <div class="ca-progress-bar"></div>
+        </div>
+      </div>
+
       <!-- Nota de recomendación de scouting -->
       <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-sm">
         <div class="flex gap-2 items-start">
@@ -234,10 +276,21 @@
               </div>
             </div>
             <div class="flex gap-2">
-              <button @click="analyzeFight(f.id)" class="btn-primary !py-1 !px-3 text-xs">
-                🤖 Analizar
+              <button @click="analyzeFight(f.id)" :disabled="analyzing"
+                      class="btn-primary !py-1 !px-3 text-xs disabled:opacity-50 disabled:cursor-not-allowed">
+                <span x-show="analyzingFightId !== f.id">🤖 Analizar</span>
+                <span x-show="analyzingFightId === f.id" class="flex items-center gap-1">
+                  <svg class="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg"
+                       fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                  </svg>
+                  Analizando<span x-text="loadingDots"></span>
+                </span>
               </button>
-              <button @click="deleteFight(f.id)" class="btn-secondary !py-1 !px-3 text-xs">
+              <button @click="deleteFight(f.id)" :disabled="analyzing"
+                      class="btn-secondary !py-1 !px-3 text-xs disabled:opacity-50 disabled:cursor-not-allowed">
                 ✕
               </button>
             </div>
@@ -284,6 +337,21 @@
                       <li x-text="w"></li>
                     </template>
                   </ul>
+                </div>
+                <div x-show="(a.result && a.result.round_by_round || []).length">
+                  <b>Round por round:</b>
+                  <div class="mt-1 space-y-2">
+                    <template x-for="(r, idx) in (a.result && a.result.round_by_round) || []" :key="idx">
+                      <div class="border-l-2 border-navy-700 pl-3">
+                        <div class="font-semibold text-navy-800"
+                             x-text="'Round ' + (r.round != null ? r.round : (idx + 1))"></div>
+                        <div x-show="r.key_moments"><span class="text-gray-500">Momentos clave:</span> <span x-text="r.key_moments"></span></div>
+                        <div x-show="r.dominated_by"><span class="text-gray-500">Dominó:</span> <span x-text="r.dominated_by"></span></div>
+                        <div x-show="r.style_notes"><span class="text-gray-500">Estilo:</span> <span x-text="r.style_notes"></span></div>
+                        <div x-show="r.fatigue_signs"><span class="text-gray-500">Fatiga:</span> <span x-text="r.fatigue_signs"></span></div>
+                      </div>
+                    </template>
+                  </div>
                 </div>
               </div>
             </details>
@@ -348,6 +416,13 @@ function fighterDetail(fighterId) {
     newFight: { youtube_url: '', file: null, title: '', opponent_name: '', result: '', coach_notes: '' },
     uploading: false,
     synthesizing: false,
+    // Estado del análisis con IA. `analyzing` bloquea los botones de análisis;
+    // `analyzingFightId` marca la pelea concreta en curso; `loadingDots` da la
+    // animación "..." del mensaje de carga.
+    analyzing: false,
+    analyzingFightId: null,
+    loadingDots: '',
+    _dotsTimer: null,
     message: '',
     editing: false,
     savingEdit: false,
@@ -566,8 +641,25 @@ function fighterDetail(fighterId) {
       }
     },
 
+    startLoadingDots() {
+      let n = 0;
+      this.loadingDots = '';
+      this._dotsTimer = setInterval(() => {
+        n = (n + 1) % 4;
+        this.loadingDots = '.'.repeat(n);
+      }, 450);
+    },
+    stopLoadingDots() {
+      if (this._dotsTimer) { clearInterval(this._dotsTimer); this._dotsTimer = null; }
+      this.loadingDots = '';
+    },
+
     async analyzeFight(fightId) {
-      this.showMessage('🤖 Analizando pelea (puede tardar 1-5 minutos)...');
+      if (this.analyzing) return;
+      this.analyzing = true;
+      this.analyzingFightId = fightId;
+      this.startLoadingDots();
+      this.showMessage('🤖 Analizando pelea con IA... esto puede tomar varios minutos');
       try {
         const res = await fetch('/api/analysis/fight', {
           method: 'POST',
@@ -576,9 +668,13 @@ function fighterDetail(fighterId) {
         });
         if (!res.ok) throw new Error(await res.text());
         this.showMessage('✓ Análisis completado');
-        this.loadFights();
+        await this.loadFights();
       } catch (e) {
         this.showMessage('Error: ' + e.message);
+      } finally {
+        this.analyzing = false;
+        this.analyzingFightId = null;
+        this.stopLoadingDots();
       }
     },
 

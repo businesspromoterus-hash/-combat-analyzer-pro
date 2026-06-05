@@ -19,6 +19,44 @@ from app.engines import (
     get_video_engine, get_strategy_engine,
     FightAnalysisResult, FighterStyleProfile, CompleteFightPlan,
 )
+from app.engines.normalize import coerce_analysis
+
+
+def collect_completed_analyses(
+    db: Session,
+    fighter_id: int,
+    fighter_name: str,
+    sport: str,
+) -> list[FightAnalysisResult]:
+    """
+    Reúne TODOS los análisis COMPLETED de un peleador como FightAnalysisResult.
+
+    Consulta los análisis directamente por JOIN con sus peleas (en lugar de
+    depender de relaciones perezosas) y, antes de construir el modelo, pasa el
+    resultado guardado por `coerce_analysis`. Así un análisis COMPLETED con un
+    resultado ligeramente desalineado se REPARA en vez de descartarse en
+    silencio — que era la causa de que el perfil consolidado dijera "aún no hay
+    peleas analizadas" pese a tener peleas en estado COMPLETED.
+    """
+    rows = (
+        db.query(m.FightAnalysis)
+        .join(m.Fight, m.FightAnalysis.fight_id == m.Fight.id)
+        .filter(m.Fight.fighter_id == fighter_id)
+        .filter(m.FightAnalysis.status == m.AnalysisStatus.COMPLETED)
+        .filter(m.FightAnalysis.result.isnot(None))
+        .order_by(m.FightAnalysis.created_at.asc())
+        .all()
+    )
+
+    analyses: list[FightAnalysisResult] = []
+    for row in rows:
+        try:
+            data = coerce_analysis(dict(row.result), fighter_name, sport)
+            analyses.append(FightAnalysisResult(**data))
+        except Exception:
+            # Solo se omite un resultado verdaderamente irreparable.
+            continue
+    return analyses
 
 
 # ========== ANÁLISIS DE UNA PELEA INDIVIDUAL ==========
@@ -92,17 +130,10 @@ async def generate_scouting_report(
     if not fighter:
         raise ValueError(f"Peleador {fighter_id} no encontrado")
 
-    fights = fight_service.list_fights_for_fighter(db, fighter_id)
-
-    # Recoger todos los análisis COMPLETED
-    individual_analyses: list[FightAnalysisResult] = []
-    for fight in fights:
-        for a in fight.analyses:
-            if a.status == m.AnalysisStatus.COMPLETED and a.result:
-                try:
-                    individual_analyses.append(FightAnalysisResult(**a.result))
-                except Exception:
-                    continue
+    # Recoger todos los análisis COMPLETED (consulta directa + reparación)
+    individual_analyses = collect_completed_analyses(
+        db, fighter_id, fighter.name, fighter.sport.value
+    )
 
     if not individual_analyses:
         raise ValueError(
@@ -147,16 +178,12 @@ async def synthesize_fighter_profile(
     if not fighter:
         raise ValueError(f"Peleador {fighter_id} no encontrado")
 
-    fights = fight_service.list_fights_for_fighter(db, fighter_id)
-
-    individual_analyses: list[FightAnalysisResult] = []
-    for fight in fights:
-        for a in fight.analyses:
-            if a.status == m.AnalysisStatus.COMPLETED and a.result:
-                try:
-                    individual_analyses.append(FightAnalysisResult(**a.result))
-                except Exception:
-                    continue
+    # Reúne TODOS los análisis COMPLETED del peleador (consulta directa +
+    # reparación defensiva). Esta es la conexión entre las peleas analizadas y
+    # el perfil táctico consolidado.
+    individual_analyses = collect_completed_analyses(
+        db, fighter_id, fighter.name, fighter.sport.value
+    )
 
     if not individual_analyses:
         bio = fighter_service.fighter_to_bio_dict(fighter)

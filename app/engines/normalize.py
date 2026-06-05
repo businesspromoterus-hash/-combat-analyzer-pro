@@ -113,6 +113,20 @@ def coerce_analysis(data: dict, fighter_name: str, sport: str) -> dict:
         if field in data:
             data[field] = _coerce_optional_text(data[field])
 
+    # round_by_round: conserva solo dicts. Si el motor devolvió una lista de
+    # strings, envuelve cada uno en un dict {key_moments: ...} para no perderlo.
+    rbr = data.get("round_by_round")
+    if isinstance(rbr, list):
+        cleaned = []
+        for item in rbr:
+            if isinstance(item, dict):
+                cleaned.append(item)
+            elif item not in (None, ""):
+                cleaned.append({"key_moments": str(item)})
+        data["round_by_round"] = cleaned
+    else:
+        data["round_by_round"] = []
+
     return data
 
 
