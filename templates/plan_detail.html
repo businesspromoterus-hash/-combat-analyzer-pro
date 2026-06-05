@@ -19,9 +19,6 @@
             <span class="text-gold-500 mx-2">vs</span>
             <span x-text="oppFighter && oppFighter.name"></span>
           </h1>
-          <div class="text-gray-300 mt-1 text-sm">
-            Motor: <span class="uppercase font-bold" x-text="plan && prettyEngine(plan.engine_used)"></span>
-          </div>
         </div>
         <a :href="`/api/analysis/plan/${planId}/pdf`" target="_blank"
            class="btn-primary !bg-blood-500 hover:!bg-blood-600">
