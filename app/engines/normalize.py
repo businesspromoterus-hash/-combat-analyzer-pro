@@ -52,6 +52,33 @@ _ANALYSIS_LIST_FIELDS = (
     "favorite_techniques",
     "defensive_errors",
 )
+# Campos OPCIONALES de tipo string. El modelo a veces devuelve una lista
+# (p. ej. fatigue_signs o corner_instructions como varios puntos) donde el
+# esquema espera un string plano, lo que provocaba ValidationError. Aquí se
+# normalizan: lista -> string unido por saltos de línea; None se respeta.
+_ANALYSIS_OPTIONAL_TEXT_FIELDS = (
+    "when_hand_drops",
+    "fatigue_signs",
+    "mental_state",
+    "vs_orthodox",
+    "vs_southpaw",
+    "movement_pattern",
+    "defense_style",
+    "corner_instructions",
+    "between_rounds_adjustments",
+    "win_loss_cause",
+    "notes",
+)
+
+
+def _coerce_optional_text(value):
+    """Convierte listas/valores a un string plano; conserva None y strings."""
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts = [str(v).strip() for v in value if str(v).strip()]
+        return "\n".join(parts) if parts else None
+    return str(value)
 
 
 def coerce_analysis(data: dict, fighter_name: str, sport: str) -> dict:
@@ -81,6 +108,10 @@ def coerce_analysis(data: dict, fighter_name: str, sport: str) -> dict:
             data[field] = []
         else:
             data[field] = [str(value)]
+
+    for field in _ANALYSIS_OPTIONAL_TEXT_FIELDS:
+        if field in data:
+            data[field] = _coerce_optional_text(data[field])
 
     return data
 
