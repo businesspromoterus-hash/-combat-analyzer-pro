@@ -84,11 +84,11 @@ CONTEXTO DE INTERNET — LO QUE SE SABE PÚBLICAMENTE:
 {web_context}
 ════════════════════════════════════════
 
-INSTRUCCIÓN CRÍTICA — TIMESTAMPS:
-Para CADA observación táctica positiva o negativa DEBES indicar:
-- En qué ROUND ocurre
-- En qué MINUTO aproximado (ej: "Round 3, min 1:20")
-- Si es patrón repetido, menciona TODOS los momentos
+INSTRUCCIÓN CRÍTICA — ROUNDS:
+Para CADA observación táctica positiva o negativa DEBES indicar ÚNICAMENTE
+el ROUND en el que ocurre (ej: "Round 3"). NO indiques el minuto ni el
+timestamp exacto — solo el round. Si es un patrón repetido, menciona TODOS
+los rounds en los que aparece.
 
 INSTRUCCIÓN DE ENRIQUECIMIENTO:
 Cuando observes algo en el video, indica si:
@@ -105,49 +105,49 @@ Genera el análisis completo en JSON con EXACTAMENTE estas claves
   "fighting_style": "estilo de pelea observado en el video, con contexto público",
   "primary_stance_behavior": "guardia/postura principal (orthodox/southpaw/switch) y cómo la usa",
   "strengths": [
-    "Fortaleza — Round X min Y:ZZ — confirma reputación pública / nuevo descubrimiento"
+    "Fortaleza — Round X — confirma reputación pública / nuevo descubrimiento"
   ],
   "weaknesses": [
-    "Debilidad — Round X min Y:ZZ — conocida públicamente / nueva en este video"
+    "Debilidad — Round X — conocida públicamente / nueva en este video"
   ],
   "repeated_patterns": [
-    "Patrón repetido — TODOS los Round X min Y:ZZ donde ocurre"
+    "Patrón repetido — TODOS los Round X donde ocurre"
   ],
   "favorite_techniques": [
-    "Técnica/golpe favorito — Round X min Y:ZZ — confirma/contradice/nuevo"
+    "Técnica/golpe favorito — Round X — confirma/contradice/nuevo"
   ],
   "defensive_errors": [
-    "Error defensivo — Round X min Y:ZZ (y otros momentos) — conocido / nuevo"
+    "Error defensivo — Round X (y otros rounds) — conocido / nuevo"
   ],
-  "when_hand_drops": "cuándo y en qué momentos baja la mano (timestamps), o null",
-  "cardio_assessment": "evaluación del cardio con timestamps — compara con reputación pública",
-  "pressure_response": "cómo responde a la presión, con timestamps — compara con lo conocido",
-  "late_rounds_behavior": "comportamiento en rounds finales con timestamps — compara con reputación de cardio",
-  "fatigue_signs": "señales visibles de cansancio con timestamps, o null",
+  "when_hand_drops": "en qué rounds baja la mano (solo el round, sin minuto), o null",
+  "cardio_assessment": "evaluación del cardio por round — compara con reputación pública",
+  "pressure_response": "cómo responde a la presión, indicando el round — compara con lo conocido",
+  "late_rounds_behavior": "comportamiento en rounds finales (por round) — compara con reputación de cardio",
+  "fatigue_signs": "señales visibles de cansancio y en qué rounds aparecen, o null",
   "mental_state": "estado mental durante la pelea, o null",
-  "vs_orthodox": "comportamiento frente a diestros con timestamps, o null",
-  "vs_southpaw": "comportamiento frente a zurdos con timestamps, o null",
-  "shots_received_most": ["qué golpes/técnicas le conectan más, con timestamps"],
-  "movement_pattern": "cómo se mueve (footwork, ángulos) con timestamps, o null",
+  "vs_orthodox": "comportamiento frente a diestros (indica el round), o null",
+  "vs_southpaw": "comportamiento frente a zurdos (indica el round), o null",
+  "shots_received_most": ["qué golpes/técnicas le conectan más, indicando el round"],
+  "movement_pattern": "cómo se mueve (footwork, ángulos), indicando el round, o null",
   "defense_style": "sistema defensivo principal (head movement, guardia, etc.), o null",
   "corner_instructions": "instrucciones de la esquina y ajustes visibles, o null",
   "between_rounds_adjustments": "qué ajusta o no entre rounds, o null",
-  "win_loss_cause": "por qué ganó o perdió esta pelea, con timestamps y contexto público",
+  "win_loss_cause": "por qué ganó o perdió esta pelea, indicando el round y contexto público",
   "key_moments": [
     {{
       "round": 3,
-      "timestamp": "1:45",
       "type": "weakness",
       "description": "descripción del momento",
       "importance": "alta/media/baja"
     }}
   ],
-  "danger_signs": ["señal de peligro detectada con timestamp"],
+  "danger_signs": ["señal de peligro detectada, indicando el round"],
   "confidence": 0.8,
   "notes": "resumen ejecutivo combinando el video con el contexto de internet — qué confirma, qué contradice, qué es nuevo"
 }}
 
-REGLA DE ORO: Cada observación debe tener Round + minuto Y contexto (confirma/contradice/nuevo).
+REGLA DE ORO: Cada observación debe indicar SOLO el Round (nunca el minuto ni el
+timestamp exacto) Y el contexto (confirma/contradice/nuevo).
 Los campos de texto REQUERIDOS (fighting_style, primary_stance_behavior, cardio_assessment,
 pressure_response, late_rounds_behavior) NUNCA pueden quedar vacíos. Las listas REQUERIDAS
 (strengths, weaknesses, repeated_patterns, favorite_techniques, defensive_errors) deben tener
@@ -167,7 +167,7 @@ Cada análisis combina observaciones del video con contexto de internet.
 
 Tu tarea: sintetizar TODO en el reporte de scouting más completo y profesional posible.
 Cada patrón debe incluir:
-- Timestamps de referencia de múltiples peleas
+- Los ROUNDS de referencia de múltiples peleas (solo el round, nunca el minuto ni timestamp)
 - Si está confirmado por múltiples fuentes (video + internet)
 - Si es un descubrimiento nuevo solo visible en video
 
@@ -183,21 +183,21 @@ Genera el reporte de scouting en JSON con EXACTAMENTE estas claves
   "fighter_name": "{fighter_name}",
   "overall_style": "estilo general completo combinando video + fuentes públicas",
   "consistent_strengths": [
-    "Fortaleza — confirmada en video (timestamps de varias peleas) + fuentes públicas (mínimo 6)"
+    "Fortaleza — confirmada en video (rounds de varias peleas) + fuentes públicas (mínimo 6)"
   ],
   "consistent_weaknesses": [
-    "Debilidad — timestamps de todas las peleas + contexto público (mínimo 6)"
+    "Debilidad — rounds de todas las peleas + contexto público (mínimo 6)"
   ],
   "signature_techniques": [
-    "Técnica distintiva con timestamps y contexto público (mínimo 5)"
+    "Técnica distintiva con los rounds donde aparece y contexto público (mínimo 5)"
   ],
   "recurring_defensive_holes": [
-    "Hueco defensivo recurrente — timestamps de múltiples peleas — conocido/nuevo (mínimo 4)"
+    "Hueco defensivo recurrente — rounds de múltiples peleas — conocido/nuevo (mínimo 4)"
   ],
-  "cardio_profile": "evaluación del cardio con timestamps y comparación con reputación pública",
-  "mental_profile": "respuesta a presión y adversidad, con timestamps y contexto público",
+  "cardio_profile": "evaluación del cardio por round y comparación con reputación pública",
+  "mental_profile": "respuesta a presión y adversidad, indicando los rounds y contexto público",
   "historical_losses_pattern": "cómo ha perdido históricamente — referencias de video e internet",
-  "matchup_history_vs_similar": "rendimiento frente a peleadores de perfil similar al nuestro, con timestamps y referencias",
+  "matchup_history_vs_similar": "rendimiento frente a peleadores de perfil similar al nuestro, con los rounds y referencias",
   "summary": "resumen ejecutivo combinando video + internet — 5-6 oraciones para el entrenador"
 }}
 
