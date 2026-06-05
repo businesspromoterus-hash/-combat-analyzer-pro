@@ -258,8 +258,7 @@
             <div class="flex justify-between items-start">
               <div>
                 <div class="text-sm font-semibold">
-                  Pelea #<span x-text="a.fight_id"></span> ·
-                  Motor: <span class="uppercase" x-text="prettyEngine(a.engine_used)"></span>
+                  Pelea #<span x-text="a.fight_id"></span>
                 </div>
                 <div class="text-xs"
                      :class="a.status === 'completed' ? 'text-green-600' : a.status === 'failed' ? 'text-red-600' : 'text-yellow-600'"
@@ -298,9 +297,9 @@
     <div class="card p-6 mb-6">
       <div class="flex justify-between items-center mb-3">
         <h2 class="text-xl font-bold text-navy-900">Perfil táctico consolidado</h2>
-        <button @click="synthesizeProfile()" :disabled="synthesizing" class="btn-primary !py-1 !px-3 text-sm">
+        <button @click="synthesizeProfile()" :disabled="synthesizing" class="btn-primary !py-1 !px-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed">
           <span x-show="!synthesizing">🔄 Generar / actualizar</span>
-          <span x-show="synthesizing">Sintetizando...</span>
+          <span x-show="synthesizing">Procesando...</span>
         </button>
       </div>
       <div x-show="!profile" class="text-gray-500 text-sm">
