@@ -166,6 +166,64 @@ async def generate_scouting_report(
     return report
 
 
+async def ensure_scouting(
+    db: Session,
+    fighter_id: int,
+) -> Optional[m.ScoutingReport]:
+    """
+    Devuelve un reporte de scouting utilizable para el peleador, generándolo si
+    hace falta. Resuelve la desconexión que hacía que el plan dijera
+    "no tiene scouting generado" aunque el perfil táctico ya existiera.
+
+    Orden de resolución:
+      1. Si ya existe un ScoutingReport, se usa el más reciente.
+      2. Si existe un FighterProfile (el "perfil táctico consolidado" que el
+         entrenador ya generó), se deriva un ScoutingReport de él. Comparten el
+         mismo esquema (FighterStyleProfile), así que es una conversión directa.
+      3. Si no hay perfil pero sí análisis COMPLETED, se genera el scouting con
+         Gemini a partir de ellos.
+      4. Si no hay nada de lo anterior, se devuelve None.
+    """
+    existing = (
+        db.query(m.ScoutingReport)
+        .filter(m.ScoutingReport.fighter_id == fighter_id)
+        .order_by(m.ScoutingReport.created_at.desc())
+        .first()
+    )
+    if existing:
+        return existing
+
+    # 2. Derivar del perfil táctico ya generado por el entrenador.
+    profile = (
+        db.query(m.FighterProfile)
+        .filter(m.FighterProfile.fighter_id == fighter_id)
+        .first()
+    )
+    if profile and isinstance(profile.profile, dict) and profile.profile:
+        report = m.ScoutingReport(
+            fighter_id=fighter_id,
+            report=profile.profile,
+            fights_analyzed=0,
+            engine_used=profile.engine_used or "profile",
+            status="pending",
+        )
+        db.add(report)
+        db.commit()
+        db.refresh(report)
+        return report
+
+    # 3. No hay perfil: intentar generar scouting desde los análisis COMPLETED.
+    fighter = fighter_service.get_fighter(db, fighter_id)
+    if fighter:
+        analyses = collect_completed_analyses(
+            db, fighter_id, fighter.name, fighter.sport.value
+        )
+        if analyses:
+            return await generate_scouting_report(db, fighter_id)
+
+    return None
+
+
 # ========== SÍNTESIS DE PERFIL (compatible con flujo anterior) ==========
 
 async def synthesize_fighter_profile(

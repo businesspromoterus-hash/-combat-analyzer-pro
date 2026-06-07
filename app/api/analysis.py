@@ -1,8 +1,19 @@
 """Endpoints de análisis IA: pelea, scouting completo, perfil y plan."""
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+# Mensaje amigable en español para errores técnicos inesperados. Nunca se le
+# muestra al entrenador el detalle técnico (TypeError, stacktraces, etc.); ese
+# detalle se registra en el log del servidor para diagnóstico.
+_FRIENDLY_ERROR = (
+    "Ocurrió un problema al procesar la solicitud con la IA. "
+    "Inténtalo de nuevo en unos minutos."
+)
 
 from app.core.database import get_db
 from app.api.auth import get_current_user
@@ -61,8 +72,9 @@ async def analyze_fight(
         return analysis
     except ValueError as e:
         raise HTTPException(400, str(e))
-    except Exception as e:
-        raise HTTPException(500, f"{type(e).__name__}: {e}")
+    except Exception:
+        logger.exception("Error analizando pelea %s", req.fight_id)
+        raise HTTPException(500, _FRIENDLY_ERROR)
 
 
 @router.get("/fight/{fight_id}", response_model=list[s.AnalysisOut])
@@ -100,8 +112,9 @@ async def generate_scouting(
         return report
     except ValueError as e:
         raise HTTPException(400, str(e))
-    except Exception as e:
-        raise HTTPException(500, f"{type(e).__name__}: {e}")
+    except Exception:
+        logger.exception("Error generando scouting de peleador %s", fighter_id)
+        raise HTTPException(500, _FRIENDLY_ERROR)
 
 
 @router.get("/scouting/{fighter_id}", response_model=s.ScoutingReportOut)
@@ -140,6 +153,9 @@ async def synthesize_profile(
         return profile
     except ValueError as e:
         raise HTTPException(400, str(e))
+    except Exception:
+        logger.exception("Error sintetizando perfil de peleador %s", req.fighter_id)
+        raise HTTPException(500, _FRIENDLY_ERROR)
 
 
 @router.get("/profile/{fighter_id}", response_model=s.FighterProfileOut)
@@ -176,8 +192,16 @@ async def predict_fight(
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
-    except Exception as e:
-        raise HTTPException(500, f"{type(e).__name__}: {e}")
+    except Exception:
+        logger.exception(
+            "Error en predicción rápida (%s vs %s)",
+            req.our_fighter_id, req.opponent_id,
+        )
+        raise HTTPException(
+            500,
+            "No se pudo generar la predicción en este momento. "
+            "Inténtalo de nuevo en unos minutos.",
+        )
 
 
 # ========== PLAN DE COMBATE ==========
@@ -194,32 +218,24 @@ async def create_fight_plan(
 
     Requiere que ambos peleadores tengan scouting generado y confirmado.
     """
-    _own_fighter(db, req.our_fighter_id, user)
-    _own_fighter(db, req.opponent_id, user)
+    our = _own_fighter(db, req.our_fighter_id, user)
+    opp = _own_fighter(db, req.opponent_id, user)
     try:
-        # Verificar que ambos peleadores tienen scouting
-        our_scouting = (
-            db.query(m.ScoutingReport)
-            .filter(m.ScoutingReport.fighter_id == req.our_fighter_id)
-            .order_by(m.ScoutingReport.created_at.desc())
-            .first()
-        )
-        opp_scouting = (
-            db.query(m.ScoutingReport)
-            .filter(m.ScoutingReport.fighter_id == req.opponent_id)
-            .order_by(m.ScoutingReport.created_at.desc())
-            .first()
-        )
+        # El scouting puede derivarse del perfil táctico ya generado o de los
+        # análisis COMPLETED. Así el plan deja de fallar con "no tiene scouting"
+        # cuando el entrenador ya generó el perfil táctico del peleador.
+        our_scouting = await analysis_service.ensure_scouting(db, req.our_fighter_id)
+        opp_scouting = await analysis_service.ensure_scouting(db, req.opponent_id)
 
         if not our_scouting:
             raise ValueError(
-                "Nuestro peleador no tiene scouting generado. "
-                "Ve al perfil del peleador y genera el scouting primero."
+                f"{our.name} todavía no tiene perfil ni peleas analizadas. "
+                "Abre su perfil, analiza al menos una pelea y genera el perfil táctico."
             )
         if not opp_scouting:
             raise ValueError(
-                "El oponente no tiene scouting generado. "
-                "Ve al perfil del oponente y genera el scouting primero."
+                f"{opp.name} todavía no tiene perfil ni peleas analizadas. "
+                "Abre su perfil, analiza al menos una pelea y genera el perfil táctico."
             )
 
         plan = await analysis_service.generate_fight_plan_from_scouting(
@@ -245,6 +261,16 @@ async def create_fight_plan(
         return plan
     except ValueError as e:
         raise HTTPException(400, str(e))
+    except Exception:
+        logger.exception(
+            "Error generando plan (%s vs %s)",
+            req.our_fighter_id, req.opponent_id,
+        )
+        raise HTTPException(
+            500,
+            "No se pudo generar el plan de combate en este momento. "
+            "Inténtalo de nuevo en unos minutos.",
+        )
 
 
 @router.get("/plan/{plan_id}", response_model=s.FightPlanOut)

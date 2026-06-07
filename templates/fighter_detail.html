@@ -267,7 +267,7 @@
         <template x-for="f in fights" :key="f.id">
           <div class="border rounded-md p-3 flex items-center justify-between">
             <div class="flex-1">
-              <div class="font-semibold" x-text="f.title || ('Pelea #' + f.id)"></div>
+              <div class="font-semibold" x-text="labelForFight(f)"></div>
               <div class="text-xs text-gray-500">
                 <span x-show="f.youtube_url">🔗 YouTube</span>
                 <span x-show="f.local_file_path">📁 Archivo local</span>
@@ -310,9 +310,7 @@
           <div class="border rounded-md p-4">
             <div class="flex justify-between items-start">
               <div>
-                <div class="text-sm font-semibold">
-                  Pelea #<span x-text="a.fight_id"></span>
-                </div>
+                <div class="text-sm font-semibold" x-text="fightLabelById(a.fight_id)"></div>
                 <div class="text-xs"
                      :class="a.status === 'completed' ? 'text-green-600' : a.status === 'failed' ? 'text-red-600' : 'text-yellow-600'"
                      x-text="a.status.toUpperCase()"></div>
@@ -510,6 +508,31 @@ function fighterDetail(fighterId) {
       }
     },
 
+    // Nombre de la pelea tal como lo escribió el entrenador: usa el título que
+    // puso (ej. "Vs Volka", "Vs Max"); si no hay título pero sí oponente, lo
+    // muestra como "Vs <oponente>"; y solo como último recurso "Pelea #id".
+    labelForFight(f) {
+      if (!f) return '';
+      if (f.title && f.title.trim()) return f.title.trim();
+      if (f.opponent_name && f.opponent_name.trim()) return 'Vs ' + f.opponent_name.trim();
+      return 'Pelea #' + f.id;
+    },
+    fightLabelById(fightId) {
+      const f = this.fights.find(x => x.id === fightId);
+      return f ? this.labelForFight(f) : ('Pelea #' + fightId);
+    },
+
+    // Extrae el mensaje amigable de una respuesta de error, sin exponer JSON
+    // crudo ni detalles técnicos al entrenador.
+    async errorMessage(res, fallback) {
+      try {
+        const data = await res.json();
+        if (typeof data.detail === 'string') return data.detail;
+        if (Array.isArray(data.detail) && data.detail[0]?.msg) return data.detail[0].msg;
+      } catch (e) { /* respuesta sin JSON */ }
+      return fallback || 'Ocurrió un problema. Inténtalo de nuevo en unos minutos.';
+    },
+
     // Etiqueta del motor mostrada al usuario. El motor de análisis de video
     // se presenta de forma genérica — no se expone su nombre interno.
     prettyEngine(name) {
@@ -525,7 +548,7 @@ function fighterDetail(fighterId) {
       this.deleting = true;
       try {
         const res = await fetch(`/api/fighters/${this.fighterId}`, { method: 'DELETE' });
-        if (!res.ok && res.status !== 204) throw new Error(await res.text());
+        if (!res.ok && res.status !== 204) throw new Error(await this.errorMessage(res, 'No se pudo eliminar el peleador.'));
         window.location.href = '/';
       } catch (e) {
         this.showMessage('Error: ' + e.message);
@@ -565,7 +588,7 @@ function fighterDetail(fighterId) {
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw new Error(await this.errorMessage(res, 'No se pudieron guardar los cambios.'));
         this.fighter = await res.json();
         this.editing = false;
         this.showMessage('✓ Peleador actualizado');
@@ -610,7 +633,7 @@ function fighterDetail(fighterId) {
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        this.showMessage('Error: ' + (await res.text()));
+        this.showMessage('Error: ' + (await this.errorMessage(res, 'No se pudo agregar la pelea.')));
         return;
       }
       this.newFight = { youtube_url: '', file: null, title: '', opponent_name: '', result: '', coach_notes: '' };
@@ -630,7 +653,7 @@ function fighterDetail(fighterId) {
         if (this.newFight.result) fd.append('result', this.newFight.result);
         if (this.newFight.coach_notes) fd.append('coach_notes', this.newFight.coach_notes);
         const res = await fetch('/api/fights/upload', { method: 'POST', body: fd });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw new Error(await this.errorMessage(res, 'No se pudo subir el video.'));
         this.newFight = { youtube_url: '', file: null, title: '', opponent_name: '', result: '', coach_notes: '' };
         this.showMessage('✓ Video subido');
         this.loadFights();
@@ -666,7 +689,7 @@ function fighterDetail(fighterId) {
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ fight_id: fightId }),
         });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw new Error(await this.errorMessage(res, 'No se pudo analizar la pelea. Inténtalo de nuevo en unos minutos.'));
         this.showMessage('✓ Análisis completado');
         await this.loadFights();
       } catch (e) {
@@ -692,7 +715,7 @@ function fighterDetail(fighterId) {
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ fighter_id: this.fighterId }),
         });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw new Error(await this.errorMessage(res, 'No se pudo generar el perfil. Inténtalo de nuevo en unos minutos.'));
         this.profile = await res.json();
         this.showMessage('✓ Perfil actualizado');
       } catch (e) {

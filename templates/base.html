@@ -67,23 +67,23 @@
         </div>
       </a>
       <nav class="flex items-center gap-2">
-        <a href="/" class="px-3 py-2 hover:bg-navy-800 rounded text-sm font-semibold">
+        <a href="/" data-i18n="nav.home" class="px-3 py-2 hover:bg-navy-800 rounded text-sm font-semibold">
           Inicio
         </a>
-        <a href="/fighters/new" class="px-3 py-2 hover:bg-navy-800 rounded text-sm font-semibold">
+        <a href="/fighters/new" data-i18n="nav.new_fighter" class="px-3 py-2 hover:bg-navy-800 rounded text-sm font-semibold">
           Nuevo peleador
         </a>
-        <a href="/plan/new" class="btn-primary !bg-blood-500 hover:!bg-blood-600 text-sm">
+        <a href="/plan/new" data-i18n="nav.new_plan" class="btn-primary !bg-blood-500 hover:!bg-blood-600 text-sm">
           Nuevo plan
         </a>
         <form action="/logout" method="post" class="inline">
-          <button type="submit" class="px-3 py-2 hover:bg-navy-800 rounded text-sm font-semibold">
+          <button type="submit" data-i18n="nav.logout" class="px-3 py-2 hover:bg-navy-800 rounded text-sm font-semibold">
             Salir
           </button>
         </form>
         <span class="ml-2 flex items-center gap-1 text-xs">
-          <button type="button" onclick="setLanguage('es')" class="px-2 py-1 hover:bg-navy-800 rounded font-bold">ES</button>
-          <button type="button" onclick="setLanguage('en')" class="px-2 py-1 hover:bg-navy-800 rounded font-bold">EN</button>
+          <button type="button" data-lang-btn="es" onclick="setLanguage('es')" class="px-2 py-1 hover:bg-navy-800 rounded font-bold">ES</button>
+          <button type="button" data-lang-btn="en" onclick="setLanguage('en')" class="px-2 py-1 hover:bg-navy-800 rounded font-bold">EN</button>
         </span>
       </nav>
     </div>
@@ -96,10 +96,24 @@
 
   <!-- Footer -->
   <footer class="border-t border-gray-200 mt-16 py-6 text-center text-sm text-gray-500">
-    Combat Analyzer Pro &middot; Plataforma táctica para deportes de combate
+    Combat Analyzer Pro &middot; <span data-i18n="footer.tagline">Plataforma táctica para deportes de combate</span>
   </footer>
 
   {% block scripts %}{% endblock %}
-  <script>window.addEventListener('DOMContentLoaded', applyTranslations);</script>
+  <script>
+    // Resalta el idioma activo en el selector ES/EN del header.
+    function highlightActiveLanguage() {
+      var lang = (typeof detectLanguage === 'function') ? detectLanguage() : 'es';
+      document.querySelectorAll('[data-lang-btn]').forEach(function (btn) {
+        var active = btn.getAttribute('data-lang-btn') === lang;
+        btn.classList.toggle('bg-gold-500', active);
+        btn.classList.toggle('text-navy-900', active);
+      });
+    }
+    window.addEventListener('DOMContentLoaded', function () {
+      applyTranslations();
+      highlightActiveLanguage();
+    });
+  </script>
 </body>
 </html>

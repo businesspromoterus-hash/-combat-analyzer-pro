@@ -1,13 +1,14 @@
 """
 API de búsqueda automática de peleadores.
-El entrenador escribe el nombre y la app busca los datos automáticamente.
-Si no encuentra nada, el entrenador puede meter todo a mano.
+El entrenador escribe el nombre y Gemini busca los datos automáticamente en
+internet. Si no encuentra nada, el entrenador puede meter todo a mano.
 """
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
-import anthropic
+import google.generativeai as genai
 import json
 import re
 
@@ -16,7 +17,11 @@ from app.core.config import settings
 from app.api.auth import get_current_user
 from app.models import db_models as m
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/fighters/search", tags=["fighter-search"])
+
+GEMINI_SEARCH_MODEL = "gemini-2.5-flash"
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -69,12 +74,17 @@ async def search_fighter(
 ):
     """
     Busca datos de un peleador por nombre.
-    Usa Claude con web search para encontrar información pública.
+    Usa Gemini con búsqueda en Google para encontrar información pública.
     Retorna hasta 3 posibles coincidencias para que el entrenador elija.
     Si no encuentra nada, retorna found=False para que el entrenador meta datos manuales.
     """
-    if not settings.ANTHROPIC_API_KEY:
-        raise HTTPException(500, "ANTHROPIC_API_KEY no configurada")
+    if not settings.GEMINI_API_KEY:
+        # No exponemos detalle técnico; el entrenador puede ingresar a mano.
+        return FighterSearchResponse(
+            results=[],
+            found=False,
+            message="La búsqueda automática no está disponible ahora. Ingresa los datos manualmente.",
+        )
 
     sport_context = f"Deporte: {req.sport}." if req.sport else "Puede ser cualquier deporte de combate."
 
@@ -145,21 +155,23 @@ Si no encuentras nada confiable:
 }}
 """.strip()
 
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+    model = genai.GenerativeModel(GEMINI_SEARCH_MODEL)
+
+    def _generate() -> str:
+        """
+        Llama a Gemini pidiéndole que busque en internet. Intenta primero con la
+        herramienta de Google Search (grounding); si el SDK/modelo no la acepta,
+        cae a una generación normal con el conocimiento del propio modelo.
+        """
+        try:
+            resp = model.generate_content(prompt, tools=[{"google_search": {}}])
+        except Exception:
+            resp = model.generate_content(prompt)
+        return (resp.text or "")
 
     try:
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4096,
-            tools=[{"type": "web_search_20250305", "name": "web_search"}],
-            messages=[{"role": "user", "content": prompt}],
-        )
-
-        # Extraer el texto de la respuesta
-        raw = ""
-        for block in response.content:
-            if hasattr(block, "text"):
-                raw += block.text
+        raw = _generate()
 
         raw = raw.strip()
         raw = re.sub(r"^```json\s*", "", raw)
@@ -184,9 +196,10 @@ Si no encuentras nada confiable:
             found=False,
             message="No se pudo procesar la búsqueda. Ingresa los datos manualmente."
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("Error en la búsqueda automática de peleador '%s'", req.name)
         return FighterSearchResponse(
             results=[],
             found=False,
-            message=f"Error en la búsqueda. Ingresa los datos manualmente."
+            message="No se pudo completar la búsqueda. Ingresa los datos manualmente."
         )

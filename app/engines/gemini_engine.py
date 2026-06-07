@@ -74,6 +74,8 @@ Solo JSON, sin markdown.
 
 ENRICHED_FIGHT_ANALYSIS_PROMPT = """
 Eres un analista de deportes de combate de élite con acceso al video completo.
+Tu reporte lo usará un entrenador para preparar una pelea real, así que tiene
+que ser PRECISO. Más vale decir "no se aprecia con claridad" que inventar.
 
 PELEADOR A ANALIZAR: {fighter_name}
 DEPORTE: {sport}
@@ -84,11 +86,41 @@ CONTEXTO DE INTERNET — LO QUE SE SABE PÚBLICAMENTE:
 {web_context}
 ════════════════════════════════════════
 
+══════════════════════════════════════════════════════════════════════
+REGLA NÚMERO UNO — SOLO LO QUE VES CLARAMENTE:
+Reporta ÚNICAMENTE lo que se observa con claridad en ESTE video.
+- PROHIBIDO inventar eventos. Si no hubo un knockdown, no lo menciones.
+  Si no se ve un corte, una sumisión o un punto deducido, NO lo escribas.
+- No rellenes con clichés ("buen boxeador", "muy técnico") sin evidencia visible.
+- Si un dato no se puede determinar del video (mala calidad, ángulo, video corto,
+  no se ve la esquina), escribe explícitamente "No se aprecia con claridad en el
+  video" en ese campo en lugar de adivinar.
+- Distingue lo que VES en el video de lo que viene del CONTEXTO de internet
+  (ver instrucción de enriquecimiento más abajo). No mezcles ni presentes como
+  visto algo que solo es reputación pública.
+- Ajusta "confidence": bajo (0.3-0.5) si el video es corto/borroso o ves poco;
+  alto (0.7-0.9) solo si el video es claro y largo.
+══════════════════════════════════════════════════════════════════════
+
+QUÉ OBSERVAR (sé concreto y técnico, siempre que se aprecie en el video):
+1. GUARDIA: postura (orthodox/southpaw/switch), altura y posición de las manos,
+   qué mano protege qué, cuándo y tras qué acción baja la guardia.
+2. JUEGO DE PIES (footwork): cómo entra y sale de distancia, si pivota, corta el
+   ring/jaula, se mueve lateral o lineal, si cruza los pies o queda plano.
+3. SELECCIÓN DE GOLPES/TÉCNICAS (shot selection): qué golpes o técnicas elige y
+   en qué situaciones, qué combinaciones repite, qué arma usa para abrir y cuál
+   para rematar, si va a la cabeza o al cuerpo.
+4. RESPUESTAS A LA PRESIÓN: qué hace cuando lo presionan, lo arrinconan o lo
+   lastiman — ¿clinchea, se mueve, contesta, se cubre, retrocede en línea recta?
+5. DISTRIBUCIÓN DEL PESO (weight distribution): sobre qué pierna carga el peso,
+   si se sienta en los golpes o pega de arribita, balance al entrar/salir, si
+   queda desbalanceado tras fallar, base al defender.
+
 INSTRUCCIÓN CRÍTICA — ROUNDS:
 Para CADA observación táctica positiva o negativa DEBES indicar ÚNICAMENTE
 el ROUND en el que ocurre (ej: "Round 3"). NO indiques el minuto ni el
 timestamp exacto — solo el round. Si es un patrón repetido, menciona TODOS
-los rounds en los que aparece.
+los rounds en los que realmente aparece.
 
 ══════════════════════════════════════════════════════════════════════
 INSTRUCCIÓN OBLIGATORIA — ANÁLISIS RONDA POR RONDA (round_by_round):
@@ -96,16 +128,16 @@ Es la parte MÁS IMPORTANTE del reporte. DEBES recorrer el video round por
 round, desde el Round 1 hasta el último round de la pelea, sin saltarte
 ninguno. Para CADA round entrega un objeto con:
   • "round": número del round (int).
-  • "key_moments": momentos clave del round — knockdowns/derribos, cortes,
-    golpes grandes que conectaron, momentos en que alguien se tambaleó, la
-    campana salvando a alguien, puntos deducidos, sumisiones intentadas, etc.
-    Sé concreto y narrativo. Ej: "Ramírez mandó a la lona a Espinoza con un
-    gancho de izquierda a 30s del final; Espinoza se salvó por la campana."
-    Si en ese round no pasó nada destacable, dilo explícitamente
-    ("Round de estudio, sin daño significativo").
-  • "dominated_by": quién dominó el round y por qué (nombre del peleador).
-  • "style_notes": observaciones de estilo en ese round — qué intentó cada
-    quien, ajustes tácticos, distancia, presión, qué armas usó.
+  • "key_moments": SOLO lo que realmente ocurrió y se ve en ese round —
+    knockdowns/derribos, cortes, golpes grandes que conectaron, momentos en que
+    alguien se tambaleó, la campana salvando a alguien, puntos deducidos,
+    sumisiones intentadas. Sé concreto. Si en ese round NO pasó nada destacable,
+    dilo explícitamente ("Round de estudio, sin daño significativo"). NUNCA
+    inventes un momento para llenar el campo.
+  • "dominated_by": quién dominó el round y por qué (nombre del peleador). Si
+    estuvo parejo, dilo.
+  • "style_notes": observaciones de estilo en ese round — guardia, juego de pies,
+    selección de golpes, distribución del peso, distancia, presión, qué armas usó.
   • "fatigue_signs": señales de fatiga visibles en ese round (boca abierta,
     manos abajo, menos volumen, piernas pesadas) o "ninguna visible".
 Nunca dejes round_by_round vacío: si solo puedes estimar los rounds, hazlo
@@ -117,6 +149,8 @@ Cuando observes algo en el video, indica si:
 - CONFIRMA lo que se sabe públicamente — ej: "Confirma su reputación de buen jab"
 - CONTRADICE lo conocido — ej: "Contrario a lo reportado, su cardio se ve sólido en rounds tardíos"
 - ES NUEVO — ej: "Nuevo patrón no reportado: usa más el gancho al cuerpo"
+Si el contexto público menciona algo que NO se ve en este video, NO lo afirmes
+como observado: a lo sumo dilo como reputación pública no verificada aquí.
 
 Genera el análisis completo en JSON con EXACTAMENTE estas claves
 (no renombres, no anides, no agregues claves nuevas):
@@ -185,12 +219,16 @@ Genera el análisis completo en JSON con EXACTAMENTE estas claves
 }}
 
 REGLA DE ORO: Cada observación debe indicar SOLO el Round (nunca el minuto ni el
-timestamp exacto) Y el contexto (confirma/contradice/nuevo).
+timestamp exacto) Y el contexto (confirma/contradice/nuevo). Y por encima de todo:
+reporta SOLO lo que ves claramente en el video — no inventes eventos, golpes,
+knockdowns ni resultados. Si no se aprecia, escribe "No se aprecia con claridad
+en el video".
 Los campos de texto REQUERIDOS (fighting_style, primary_stance_behavior, cardio_assessment,
-pressure_response, late_rounds_behavior) NUNCA pueden quedar vacíos. Las listas REQUERIDAS
-(strengths, weaknesses, repeated_patterns, favorite_techniques, defensive_errors) deben tener
-al menos un elemento. La lista "round_by_round" es OBLIGATORIA y debe contener un objeto
-por CADA round de la pelea, en orden, nunca vacía.
+pressure_response, late_rounds_behavior) NUNCA pueden quedar vacíos (usa "No se aprecia con
+claridad en el video" si hace falta). Las listas REQUERIDAS (strengths, weaknesses,
+repeated_patterns, favorite_techniques, defensive_errors) deben tener al menos un elemento
+basado en lo realmente observado. La lista "round_by_round" es OBLIGATORIA y debe contener un
+objeto por CADA round de la pelea, en orden, nunca vacía.
 
 Responde SOLO con el JSON. Sin markdown.
 """.strip()
@@ -291,8 +329,9 @@ class GeminiEngine(BaseVideoEngine):
 
             raw = ""
             for block in response.content:
-                if hasattr(block, "text"):
-                    raw += block.text
+                text = getattr(block, "text", None)
+                if text:
+                    raw += text
 
             raw = raw.strip()
             raw = re.sub(r"^```json\s*", "", raw)

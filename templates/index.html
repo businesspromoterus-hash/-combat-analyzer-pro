@@ -6,19 +6,19 @@
 
   <!-- Hero -->
   <div class="bg-gradient-to-br from-navy-900 to-navy-700 rounded-xl p-8 mb-8 text-white shadow-lg">
-    <h1 class="text-3xl font-extrabold mb-2">Plan estratégico de combate</h1>
-    <p class="text-gray-200 mb-4 max-w-2xl">
+    <h1 data-i18n="dashboard.title" class="text-3xl font-extrabold mb-2">Plan estratégico de combate</h1>
+    <p data-i18n="dashboard.subtitle" class="text-gray-200 mb-4 max-w-2xl">
       Crea perfiles de tu peleador y el rival, analiza videos de peleas con IA,
       y genera un plan táctico completo en PDF.
     </p>
     <div class="flex flex-wrap gap-3">
-      <a href="/fighters/new?role=our" class="btn-primary !bg-white !text-navy-900 hover:!bg-gray-100">
+      <a href="/fighters/new?role=our" data-i18n="dashboard.our_fighter" class="btn-primary !bg-white !text-navy-900 hover:!bg-gray-100">
         + Nuestro peleador
       </a>
-      <a href="/fighters/new?role=opponent" class="btn-primary !bg-blood-500 hover:!bg-blood-600">
+      <a href="/fighters/new?role=opponent" data-i18n="dashboard.opponent" class="btn-primary !bg-blood-500 hover:!bg-blood-600">
         + Oponente
       </a>
-      <a href="/plan/new" class="btn-primary !bg-gold-500 !text-navy-900 hover:!bg-gold-600">
+      <a href="/plan/new" data-i18n="dashboard.generate_plan" class="btn-primary !bg-gold-500 !text-navy-900 hover:!bg-gold-600">
         → Generar plan de combate
       </a>
     </div>
@@ -32,7 +32,7 @@
     <section>
       <h2 class="text-xl font-bold text-navy-900 mb-3 flex items-center gap-2">
         <span class="badge badge-our">NOSOTROS</span>
-        Nuestros peleadores
+        <span data-i18n="dashboard.our_fighters">Nuestros peleadores</span>
       </h2>
       <div class="space-y-3">
         <template x-for="f in ourFighters" :key="f.id">
@@ -52,8 +52,8 @@
           </a>
         </template>
         <div x-show="ourFighters.length === 0" class="card p-6 text-center text-gray-500">
-          Aún no tienes peleadores registrados.
-          <a href="/fighters/new?role=our" class="text-navy-700 font-bold hover:underline">Crear uno</a>.
+          <span data-i18n="dashboard.no_fighters">Aún no tienes peleadores registrados.</span>
+          <a href="/fighters/new?role=our" data-i18n="dashboard.create_one" class="text-navy-700 font-bold hover:underline">Crear uno</a>.
         </div>
       </div>
     </section>
@@ -62,7 +62,7 @@
     <section>
       <h2 class="text-xl font-bold text-blood-500 mb-3 flex items-center gap-2">
         <span class="badge badge-opp">RIVAL</span>
-        Oponentes
+        <span data-i18n="dashboard.opponents">Oponentes</span>
       </h2>
       <div class="space-y-3">
         <template x-for="f in opponents" :key="f.id">
@@ -82,8 +82,8 @@
           </a>
         </template>
         <div x-show="opponents.length === 0" class="card p-6 text-center text-gray-500">
-          Aún no tienes oponentes registrados.
-          <a href="/fighters/new?role=opponent" class="text-blood-500 font-bold hover:underline">Crear uno</a>.
+          <span data-i18n="dashboard.no_opponents">Aún no tienes oponentes registrados.</span>
+          <a href="/fighters/new?role=opponent" data-i18n="dashboard.create_one" class="text-blood-500 font-bold hover:underline">Crear uno</a>.
         </div>
       </div>
     </section>

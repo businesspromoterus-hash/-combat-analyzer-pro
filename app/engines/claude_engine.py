@@ -126,13 +126,23 @@ class ClaudeEngine(BaseStrategyEngine):
             messages=[{"role": "user", "content": prompt}],
         )
 
+        # Con web_search, response.content trae bloques heterogéneos
+        # (server_tool_use, web_search_tool_result y texto). Algunos exponen el
+        # atributo `text` con valor None, y `raw += block.text` reventaba con
+        # "can only concatenate str (not NoneType) to str". Concatenamos solo el
+        # texto realmente presente.
         raw = ""
         for block in response.content:
-            if hasattr(block, "text"):
-                raw += block.text
+            text = getattr(block, "text", None)
+            if text:
+                raw += text
         raw = raw.strip()
         raw = re.sub(r"^```json\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
+        if not raw.lstrip().startswith("{"):
+            match = re.search(r"\{.*\}", raw, re.DOTALL)
+            if match:
+                raw = match.group(0)
         return json.loads(raw)
 
     async def generate_fight_plan(
@@ -170,8 +180,9 @@ class ClaudeEngine(BaseStrategyEngine):
 
         raw = ""
         for block in response.content:
-            if hasattr(block, "text"):
-                raw += block.text
+            text = getattr(block, "text", None)
+            if text:
+                raw += text
 
         raw = raw.strip()
         raw = re.sub(r"^```json\s*", "", raw)

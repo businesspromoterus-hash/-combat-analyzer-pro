@@ -114,6 +114,16 @@ function planForm() {
     predicting: false,
     prediction: null,
     predictError: '',
+    // Extrae el mensaje amigable de una respuesta de error sin exponer JSON
+    // crudo ni detalles técnicos al entrenador.
+    async errorMessage(res, fallback) {
+      try {
+        const data = await res.json();
+        if (typeof data.detail === 'string') return data.detail;
+        if (Array.isArray(data.detail) && data.detail[0]?.msg) return data.detail[0].msg;
+      } catch (e) { /* respuesta sin JSON */ }
+      return fallback;
+    },
     async load() {
       const [our, opp] = await Promise.all([
         fetch('/api/fighters?role=our').then(r => r.json()),
@@ -138,7 +148,8 @@ function planForm() {
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw new Error(await this.errorMessage(res,
+          'No se pudo generar la predicción. Inténtalo de nuevo en unos minutos.'));
         this.prediction = await res.json();
       } catch (e) {
         this.predictError = e.message;
@@ -158,7 +169,8 @@ function planForm() {
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw new Error(await this.errorMessage(res,
+          'No se pudo generar el plan de combate. Inténtalo de nuevo en unos minutos.'));
         const plan = await res.json();
         window.location.href = `/plan/${plan.id}`;
       } catch (e) {

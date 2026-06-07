@@ -331,8 +331,13 @@ function fighterForm() {
           body: JSON.stringify(payload),
         });
         if (!res.ok) {
-          const err = await res.json();
-          throw new Error(JSON.stringify(err.detail || err));
+          let msg = 'No se pudo crear el peleador. Revisa los datos e inténtalo de nuevo.';
+          try {
+            const err = await res.json();
+            if (typeof err.detail === 'string') msg = err.detail;
+            else if (Array.isArray(err.detail) && err.detail[0]?.msg) msg = err.detail[0].msg;
+          } catch (e) { /* respuesta sin JSON */ }
+          throw new Error(msg);
         }
         const fighter = await res.json();
         window.location.href = `/fighters/${fighter.id}`;
