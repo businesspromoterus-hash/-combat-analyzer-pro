@@ -180,6 +180,32 @@ def get_best_gemini_model() -> str:
     return "gemini-2.5-flash"
 
 
+def _clean_and_parse_json(text: str) -> dict:
+    """Limpia el markdown de Gemini y parsea el JSON, reparando respuestas truncadas."""
+    raw = text.strip()
+    raw = re.sub(r"^```json\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+
+    def _close_open(s: str) -> str:
+        # Cerrar brackets y braces abiertos
+        open_braces = s.count("{") - s.count("}")
+        open_brackets = s.count("[") - s.count("]")
+        if open_brackets > 0:
+            s += "]" * open_brackets
+        if open_braces > 0:
+            s += "}" * open_braces
+        return s
+
+    try:
+        return json.loads(_close_open(raw))
+    except json.JSONDecodeError:
+        # Truncado a mitad de string — recortar hasta el último } o ] completo
+        cut = max(raw.rfind("}"), raw.rfind("]"))
+        if cut == -1:
+            raise
+        return json.loads(_close_open(raw[: cut + 1]))
+
+
 class GeminiEngine(BaseVideoEngine):
     """
     Motor Gemini OPTIMIZADO.
@@ -226,14 +252,11 @@ class GeminiEngine(BaseVideoEngine):
             contents,
             generation_config={
                 "temperature": 0.1,
-                "max_output_tokens": 16384,
+                "max_output_tokens": 32768,
             }
         )
 
-        raw = response.text.strip()
-        raw = re.sub(r"^```json\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
-        data = json.loads(raw)
+        data = _clean_and_parse_json(response.text)
         return FightAnalysisResult(**data)
 
     async def synthesize_fighter_profile(
@@ -262,12 +285,9 @@ class GeminiEngine(BaseVideoEngine):
             prompt,
             generation_config={
                 "temperature": 0.1,
-                "max_output_tokens": 16384,
+                "max_output_tokens": 32768,
             }
         )
 
-        raw = response.text.strip()
-        raw = re.sub(r"^```json\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
-        data = json.loads(raw)
+        data = _clean_and_parse_json(response.text)
         return FighterStyleProfile(**data)
