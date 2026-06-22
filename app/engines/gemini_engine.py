@@ -44,12 +44,6 @@ Genera el análisis completo en JSON:
   "fighter_name": "{fighter_name}",
   "fight_summary": "resumen de la pelea y resultado",
 
-  "context_validation": {{
-    "confirms_public_knowledge": ["observación con timestamp"],
-    "contradicts_public_knowledge": ["observación con timestamp"],
-    "new_discoveries": ["patrón nuevo con timestamp"]
-  }},
-
   "offensive_patterns": {{
     "favorite_strikes": ["técnica — Round X min Y:ZZ"],
     "entry_patterns": ["patrón con timestamp"],
@@ -120,9 +114,7 @@ Genera el análisis completo en JSON:
 
   "weaknesses": [
     "Debilidad — Round X min Y — conocida/nueva"
-  ],
-
-  "intelligence_summary": "resumen combinando video + contexto público"
+  ]
 }}
 
 Responde SOLO con el JSON. Sin markdown.
@@ -234,7 +226,7 @@ class GeminiEngine(BaseVideoEngine):
             contents,
             generation_config={
                 "temperature": 0.1,
-                "max_output_tokens": 8192,
+                "max_output_tokens": 16384,
             }
         )
 
@@ -270,7 +262,7 @@ class GeminiEngine(BaseVideoEngine):
             prompt,
             generation_config={
                 "temperature": 0.1,
-                "max_output_tokens": 8192,
+                "max_output_tokens": 16384,
             }
         )
 

@@ -15,20 +15,20 @@ class FightAnalysisResult(BaseModel):
     """Resultado estructurado del análisis de UNA pelea (generado por Gemini)."""
     # Identidad
     fighter_name: str
-    sport: str
+    sport: Optional[str] = None
 
     # Estilo general
-    fighting_style: str
-    primary_stance_behavior: str
+    fighting_style: Optional[str] = None
+    primary_stance_behavior: Optional[str] = None
 
     # Fortalezas y debilidades
     strengths: list[str]
     weaknesses: list[str]
 
     # Patrones técnicos
-    repeated_patterns: list[str]
-    favorite_techniques: list[str]
-    defensive_errors: list[str]
+    repeated_patterns: Optional[list[str]] = None
+    favorite_techniques: Optional[list[str]] = None
+    defensive_errors: Optional[list[str]] = None
     when_hand_drops: Optional[str] = None         # ¿cuándo baja la mano específicamente?
 
     # Desglose RONDA POR RONDA — obligatorio para el motor de video.
@@ -40,9 +40,9 @@ class FightAnalysisResult(BaseModel):
     round_by_round: list[dict] = []
 
     # Estado físico y mental
-    cardio_assessment: str
-    pressure_response: str
-    late_rounds_behavior: str
+    cardio_assessment: Optional[str] = None
+    pressure_response: Optional[str] = None
+    late_rounds_behavior: Optional[str] = None
     fatigue_signs: Optional[str] = None           # señales visibles de cansancio
     mental_state: Optional[str] = None            # estado mental durante la pelea
 
