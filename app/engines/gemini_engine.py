@@ -213,7 +213,7 @@ class GeminiEngine(BaseVideoEngine):
         )
 
         if video_source.startswith("http"):
-            contents = [prompt, {"video_url": video_source}]
+            contents = [prompt, {"file_data": {"mime_type": "video/*", "file_uri": video_source}}]
         else:
             # Video local — subir con File API
             video_file = await asyncio.to_thread(
