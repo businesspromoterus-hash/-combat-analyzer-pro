@@ -3,6 +3,7 @@ Motor Gemini OPTIMIZADO para velocidad máxima.
 Usa google-generativeai async nativo para evitar timeouts de Railway.
 Modelo: gemini-2.0-flash
 """
+import os
 import json
 import re
 import asyncio
@@ -180,6 +181,13 @@ Responde SOLO con el JSON. Sin markdown.
 """.strip()
 
 
+def get_best_gemini_model() -> str:
+    configured = os.getenv("GEMINI_MODEL", "")
+    if configured:
+        return configured
+    return "gemini-2.5-flash"
+
+
 class GeminiEngine(BaseVideoEngine):
     """
     Motor Gemini OPTIMIZADO.
@@ -188,7 +196,7 @@ class GeminiEngine(BaseVideoEngine):
     """
 
     name = "gemini"
-    MODEL = "gemini-2.0-flash"
+    MODEL = get_best_gemini_model()
 
     def __init__(self):
         if not settings.GEMINI_API_KEY:
